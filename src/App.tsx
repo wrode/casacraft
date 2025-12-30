@@ -1,109 +1,143 @@
 import { createSignal, Show, For } from 'solid-js';
-import type { ViewState, StylePreset, RenderState, LocalProject } from './types';
+import type { StylePreset, RenderState, LocalProject } from './types';
 import { generateId, generateSecretToken, getOrCreateClientId } from './utils/fileUtils';
-import { STYLE_CONFIGS, getStyleConfig } from './utils/promptBuilder';
+import { getStyleConfig } from './utils/promptBuilder';
 import FileUpload from './components/FileUpload';
-import RenderCanvas from './components/RenderCanvas';
-import ProjectHistory from './components/ProjectHistory';
+
+// The two styles we auto-generate
+const AUTO_STYLES: StylePreset[] = ['modern', 'traditional'];
+
+interface GalleryImage {
+  type: 'original' | 'render';
+  style?: StylePreset;
+  data: string;
+  label: string;
+}
 
 export default function App() {
   // View state - simplified: upload | generating | render
-  const [viewState, setViewState] = createSignal<ViewState>('upload');
+  const [viewState, setViewState] = createSignal<'upload' | 'generating' | 'render'>('upload');
 
   // File state
   const [imageData, setImageData] = createSignal<string | null>(null);
   const [fileName, setFileName] = createSignal<string>('');
 
-  // Style state
-  const [selectedStyle, setSelectedStyle] = createSignal<StylePreset>('modern');
-  const [showStylePicker, setShowStylePicker] = createSignal(false);
-
   // Render state
-  const [renderState, setRenderState] = createSignal<RenderState>('idle');
   const [renderProgress, setRenderProgress] = createSignal(0);
-  const [renderResult, setRenderResult] = createSignal<string | null>(null);
   const [renderError, setRenderError] = createSignal<string | null>(null);
+  const [generatingCount, setGeneratingCount] = createSignal(0);
 
-  // Project state
-  const [currentProject, setCurrentProject] = createSignal<LocalProject | null>(null);
+  // Gallery state - original + renders
+  const [galleryImages, setGalleryImages] = createSignal<GalleryImage[]>([]);
+  const [currentIndex, setCurrentIndex] = createSignal(0);
 
-  // History panel
-  const [showHistory, setShowHistory] = createSignal(false);
+  // Touch/swipe state
+  let touchStartX = 0;
+  let touchEndX = 0;
 
-  // Handle file upload - go directly to generation
+  // Handle file upload - start generating both styles
   const handleFileSelect = (dataUrl: string, name: string) => {
     setImageData(dataUrl);
     setFileName(name);
-    // Auto-start generation
-    handleGenerateRender(dataUrl, name);
+    handleGenerateRenders(dataUrl);
   };
 
-  // Handle generate render
-  const handleGenerateRender = async (image?: string, name?: string) => {
-    const img = image || imageData();
-    const fName = name || fileName();
-    if (!img) return;
-
+  // Generate both styles in parallel
+  const handleGenerateRenders = async (image: string) => {
     setViewState('generating');
-    setRenderState('generating');
     setRenderProgress(0);
     setRenderError(null);
+    setGeneratingCount(AUTO_STYLES.length);
+
+    // Start with original image in gallery
+    setGalleryImages([{
+      type: 'original',
+      data: image,
+      label: 'Original'
+    }]);
 
     // Simulate progress
     const progressInterval = setInterval(() => {
       setRenderProgress(prev => {
-        if (prev < 30) return prev + 2;
-        if (prev < 60) return prev + 1;
-        if (prev < 85) return prev + 0.5;
-        if (prev < 95) return prev + 0.2;
+        if (prev < 30) return prev + 1.5;
+        if (prev < 60) return prev + 0.8;
+        if (prev < 85) return prev + 0.4;
+        if (prev < 95) return prev + 0.15;
         return prev;
       });
     }, 500);
 
     try {
-      // Import and call AI generation
       const { generateIsometricRender } = await import('./api/openrouter');
-      const result = await generateIsometricRender(img, {
-        style: selectedStyle(),
-        annotations: [] // No annotations in simplified flow
-      });
+
+      // Generate both styles in parallel
+      const results = await Promise.all(
+        AUTO_STYLES.map(async (style) => {
+          try {
+            const result = await generateIsometricRender(image, {
+              style,
+              annotations: []
+            });
+            return { style, result, error: null };
+          } catch (err) {
+            console.error(`Generation failed for ${style}:`, err);
+            return { style, result: null, error: err };
+          }
+        })
+      );
 
       clearInterval(progressInterval);
       setRenderProgress(100);
 
-      if (result.image) {
-        setRenderResult(result.image);
-        setRenderState('done');
+      // Add successful renders to gallery
+      const newImages: GalleryImage[] = [{
+        type: 'original',
+        data: image,
+        label: 'Original'
+      }];
+
+      for (const { style, result } of results) {
+        if (result?.image) {
+          const styleConfig = getStyleConfig(style);
+          newImages.push({
+            type: 'render',
+            style,
+            data: result.image,
+            label: styleConfig.label
+          });
+        }
+      }
+
+      if (newImages.length > 1) {
+        setGalleryImages(newImages);
+        setCurrentIndex(1); // Start at first render
         setViewState('render');
 
-        // Create project record
+        // Save to local storage
         const project: LocalProject = {
           id: generateId(),
           clientId: getOrCreateClientId(),
           secretToken: generateSecretToken(),
           originalFileUrl: '',
-          originalFileName: fName,
+          originalFileName: fileName(),
           renderUrl: '',
           annotations: [],
-          style: selectedStyle(),
+          style: 'modern',
           createdAt: Date.now(),
           updatedAt: Date.now(),
-          originalFileData: img,
-          renderData: result.image
+          originalFileData: image,
+          renderData: newImages[1]?.data
         };
-        setCurrentProject(project);
 
-        // Save to local storage
         const { saveProjectLocally } = await import('./api/storage');
         await saveProjectLocally(project);
       } else {
-        throw new Error('No image returned from AI');
+        throw new Error('No images were generated successfully');
       }
     } catch (err) {
       clearInterval(progressInterval);
       console.error('Generation failed:', err);
       setRenderError(err instanceof Error ? err.message : 'Generation failed');
-      setRenderState('error');
       setViewState('upload');
     }
   };
@@ -113,42 +147,71 @@ export default function App() {
     setViewState('upload');
     setImageData(null);
     setFileName('');
-    setRenderResult(null);
-    setRenderState('idle');
-    setCurrentProject(null);
-    setShowStylePicker(false);
-    setShowHistory(false);
+    setGalleryImages([]);
+    setCurrentIndex(0);
+    setRenderError(null);
   };
 
-  // Handle regenerate with different style
-  const handleRegenerate = () => {
-    const img = imageData();
-    if (img) {
-      handleGenerateRender(img, fileName());
+  // Download current image
+  const handleDownload = () => {
+    const images = galleryImages();
+    const current = images[currentIndex()];
+    if (!current) return;
+
+    const link = document.createElement('a');
+    link.href = current.data;
+    const suffix = current.type === 'original' ? 'original' : current.style;
+    link.download = `beautiful-room-${suffix}-${Date.now()}.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Swipe handlers
+  const handleTouchStart = (e: TouchEvent) => {
+    touchStartX = e.touches[0].clientX;
+  };
+
+  const handleTouchMove = (e: TouchEvent) => {
+    touchEndX = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    const diff = touchStartX - touchEndX;
+    const threshold = 50;
+    const images = galleryImages();
+
+    if (Math.abs(diff) > threshold) {
+      if (diff > 0 && currentIndex() < images.length - 1) {
+        // Swipe left - next image
+        setCurrentIndex(i => i + 1);
+      } else if (diff < 0 && currentIndex() > 0) {
+        // Swipe right - previous image
+        setCurrentIndex(i => i - 1);
+      }
     }
   };
 
-  // Handle project load from history
-  const handleLoadProject = (project: LocalProject) => {
-    if (project.originalFileData) {
-      setImageData(project.originalFileData);
-    }
-    setFileName(project.originalFileName);
-    setSelectedStyle(project.style);
-
-    if (project.renderData) {
-      setRenderResult(project.renderData);
-      setRenderState('done');
-      setViewState('render');
-    } else {
-      setViewState('upload');
-    }
-    setCurrentProject(project);
-    setShowHistory(false);
+  // Navigate gallery
+  const goToImage = (index: number) => {
+    setCurrentIndex(index);
   };
 
-  // Get current style config
-  const currentStyleConfig = () => getStyleConfig(selectedStyle());
+  const nextImage = () => {
+    const images = galleryImages();
+    if (currentIndex() < images.length - 1) {
+      setCurrentIndex(i => i + 1);
+    }
+  };
+
+  const prevImage = () => {
+    if (currentIndex() > 0) {
+      setCurrentIndex(i => i - 1);
+    }
+  };
+
+  // Get current image
+  const currentImage = () => galleryImages()[currentIndex()];
 
   return (
     <div class="app">
@@ -190,11 +253,11 @@ export default function App() {
                 </svg>
                 <span class="progress-text">{Math.round(renderProgress())}%</span>
               </div>
-              <h3>Creating your 3D room</h3>
+              <h3>Creating your 3D rooms</h3>
               <p class="loading-hint">
                 {renderProgress() < 20 && 'Analyzing floor plan...'}
-                {renderProgress() >= 20 && renderProgress() < 40 && 'Identifying rooms...'}
-                {renderProgress() >= 40 && renderProgress() < 60 && 'Placing furniture...'}
+                {renderProgress() >= 20 && renderProgress() < 40 && 'Generating modern style...'}
+                {renderProgress() >= 40 && renderProgress() < 60 && 'Generating traditional style...'}
                 {renderProgress() >= 60 && renderProgress() < 80 && 'Adding details...'}
                 {renderProgress() >= 80 && 'Final touches...'}
               </p>
@@ -202,98 +265,90 @@ export default function App() {
           </div>
         </Show>
 
-        {/* Render result page */}
+        {/* Render gallery page */}
         <Show when={viewState() === 'render'}>
-          <RenderCanvas
-            imageData={renderResult()!}
-            onRegenerate={handleRegenerate}
-            onNewRender={handleNewRender}
-            project={currentProject()}
-          />
+          <div
+            class="gallery-container"
+            onTouchStart={handleTouchStart}
+            onTouchMove={handleTouchMove}
+            onTouchEnd={handleTouchEnd}
+          >
+            {/* Current image */}
+            <div class="gallery-image-wrapper">
+              <Show when={currentImage()}>
+                <img
+                  src={currentImage()!.data}
+                  alt={currentImage()!.label}
+                  class="gallery-image"
+                  draggable={false}
+                />
+              </Show>
+            </div>
+
+            {/* Navigation arrows (desktop) */}
+            <Show when={currentIndex() > 0}>
+              <button class="gallery-nav gallery-nav-prev" onClick={prevImage}>
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="15,18 9,12 15,6" />
+                </svg>
+              </button>
+            </Show>
+            <Show when={currentIndex() < galleryImages().length - 1}>
+              <button class="gallery-nav gallery-nav-next" onClick={nextImage}>
+                <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="9,18 15,12 9,6" />
+                </svg>
+              </button>
+            </Show>
+
+            {/* Image label */}
+            <div class="gallery-label">
+              {currentImage()?.label}
+            </div>
+
+            {/* Dots indicator */}
+            <div class="gallery-dots">
+              <For each={galleryImages()}>
+                {(_, index) => (
+                  <button
+                    class={`gallery-dot ${currentIndex() === index() ? 'active' : ''}`}
+                    onClick={() => goToImage(index())}
+                  />
+                )}
+              </For>
+            </div>
+          </div>
         </Show>
       </main>
 
       {/* Bottom bar - shown on upload and render pages */}
       <Show when={viewState() === 'upload' || viewState() === 'render'}>
         <div class="bottom-bar">
-          {/* Style picker button */}
-          <button
-            class="bottom-bar-btn"
-            onClick={() => { setShowStylePicker(!showStylePicker()); setShowHistory(false); }}
-          >
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-            </svg>
-            <span>{currentStyleConfig().label}</span>
-          </button>
-
-          {/* History button */}
-          <button
-            class="bottom-bar-btn"
-            onClick={() => { setShowHistory(!showHistory()); setShowStylePicker(false); }}
-          >
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12,6 12,12 16,14" />
-            </svg>
-            <span>History</span>
-          </button>
-
-          {/* New render button - only on render page */}
+          {/* Download button - only on render page */}
           <Show when={viewState() === 'render'}>
             <button
-              class="bottom-bar-btn primary"
-              onClick={handleNewRender}
+              class="bottom-bar-btn"
+              onClick={handleDownload}
             >
               <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                <line x1="12" y1="5" x2="12" y2="19" />
-                <line x1="5" y1="12" x2="19" y2="12" />
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/>
               </svg>
-              <span>New</span>
+              <span>Download</span>
             </button>
           </Show>
+
+          {/* New render button */}
+          <button
+            class={`bottom-bar-btn ${viewState() === 'render' ? 'primary' : ''}`}
+            onClick={handleNewRender}
+          >
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+            <span>{viewState() === 'upload' ? 'Upload' : 'New'}</span>
+          </button>
         </div>
-
-        {/* Style picker panel */}
-        <Show when={showStylePicker()}>
-          <div class="bottom-panel">
-            <div class="panel-header">
-              <h3>Choose Style</h3>
-              <button class="close-btn" onClick={() => setShowStylePicker(false)}>×</button>
-            </div>
-            <div class="style-grid">
-              <For each={STYLE_CONFIGS}>
-                {(style) => (
-                  <button
-                    class={`style-option ${selectedStyle() === style.value ? 'active' : ''}`}
-                    onClick={() => {
-                      setSelectedStyle(style.value as StylePreset);
-                      setShowStylePicker(false);
-                      // If on render page, regenerate with new style
-                      if (viewState() === 'render' && imageData()) {
-                        handleRegenerate();
-                      }
-                    }}
-                  >
-                    <span class="style-name">{style.label}</span>
-                    <span class="style-desc">{style.description}</span>
-                  </button>
-                )}
-              </For>
-            </div>
-          </div>
-        </Show>
-
-        {/* History panel */}
-        <Show when={showHistory()}>
-          <div class="bottom-panel">
-            <div class="panel-header">
-              <h3>Recent Projects</h3>
-              <button class="close-btn" onClick={() => setShowHistory(false)}>×</button>
-            </div>
-            <ProjectHistory onLoadProject={handleLoadProject} />
-          </div>
-        </Show>
       </Show>
     </div>
   );

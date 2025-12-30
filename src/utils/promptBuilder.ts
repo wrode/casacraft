@@ -3,6 +3,12 @@ import type { Annotation, StylePreset, StyleConfig } from '../types';
 // Base prompt from SPEC
 const BASE_PROMPT = `Top-down, fully 3D isometric render of the entire floor plan. Create a clean, highly detailed miniature architectural maquette with accurate room proportions and layout, matching the reference exactly.
 
+CRITICAL - ORIENTATION:
+- The 3D render MUST maintain the EXACT SAME orientation as the input floor plan
+- If the entrance is at the bottom of the floor plan, it must be at the bottom of the render
+- Do NOT rotate or mirror the layout - north stays north, the view angle must preserve the original orientation
+- Match the aspect ratio and proportions exactly as shown
+
 CRITICAL - DOORS AND OPENINGS:
 - Carefully identify ALL doors and doorways shown in the floor plan (typically shown as gaps in walls with arc swings or rectangular openings)
 - Every door between rooms MUST be rendered as an open doorway or visible door

@@ -20,7 +20,14 @@ WALLS AND STRUCTURE:
 - Do not add walls where there are none in the original
 - Do not remove or block any openings shown in the plan
 
-Remove all text labels from output. Use colorful, modern furniture and decorative objects in each room—sofas, beds, tables, cabinets, lamps, plants, rugs, appliances—arranged realistically and in scale. High-resolution, photorealistic materials (wood floors, tiles, fabrics, glass). Soft global lighting, subtle shadows, crisp edges. Professional, polished, high-quality output.`;
+CRITICAL - NO TEXT OR LABELS:
+- Do NOT include ANY text, labels, room names, or annotations in the output image
+- Remove all text that appears in the input floor plan
+- The output must be a pure 3D render with NO overlaid text whatsoever
+- No room labels, no dimension text, no watermarks, no captions
+
+FURNISHING AND QUALITY:
+Use colorful, modern furniture and decorative objects in each room—sofas, beds, tables, cabinets, lamps, plants, rugs, appliances—arranged realistically and in scale. High-resolution, photorealistic materials (wood floors, tiles, fabrics, glass). Soft global lighting, subtle shadows, crisp edges. Professional, polished, high-quality output.`;
 
 // Style configurations
 export const STYLE_CONFIGS: StyleConfig[] = [

@@ -273,8 +273,8 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  background: white;
-  border-top: 1px solid #e5e7eb;
+  background: #1a1a2e;
+  border-top: 1px solid #2d2d44;
   display: flex;
   justify-content: space-around;
   align-items: center;
@@ -292,7 +292,7 @@ body {
   border: none;
   padding: 0.5rem 1rem;
   border-radius: 12px;
-  color: #6b7280;
+  color: #a1a1aa;
   cursor: pointer;
   transition: all 0.2s;
   font-size: 0.7rem;
@@ -302,8 +302,8 @@ body {
 
 .bottom-bar-btn:hover,
 .bottom-bar-btn:active {
-  background: #f3f4f6;
-  color: #4f46e5;
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
 }
 
 .bottom-bar-btn.primary {
@@ -312,7 +312,7 @@ body {
 }
 
 .bottom-bar-btn.primary:hover {
-  background: #3730a3;
+  background: #6366f1;
   color: white;
 }
 

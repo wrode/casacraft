@@ -1,0 +1,19 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ],
+  "functions": {
+    "api/generate.js": {
+      "maxDuration": 60
+    },
+    "api/upload.js": {
+      "maxDuration": 30
+    },
+    "api/project.js": {
+      "maxDuration": 10
+    }
+  }
+}

@@ -25,7 +25,7 @@ export default async function handler(req, res) {
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
         'HTTP-Referer': req.headers.referer || 'https://casacraft.vercel.app',
-        'X-Title': 'CasaCraft'
+        'X-Title': 'Beautiful Room'
       },
       body: JSON.stringify({
         model,

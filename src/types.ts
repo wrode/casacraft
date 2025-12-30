@@ -16,7 +16,7 @@ export type RenderState =
   | 'error';
 
 // View states for the main app
-export type ViewState = 'upload' | 'preview' | 'annotate' | 'render';
+export type ViewState = 'upload' | 'generating' | 'render';
 
 // Annotation types
 export type AnnotationType = 'label' | 'arrow' | 'keep' | 'change' | 'path';

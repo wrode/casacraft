@@ -88,7 +88,7 @@ export async function generateIsometricRender(
   if (import.meta.env.DEV) {
     headers['Authorization'] = `Bearer ${apiKey}`;
     headers['HTTP-Referer'] = window.location.origin;
-    headers['X-Title'] = 'CasaCraft';
+    headers['X-Title'] = 'Beautiful Room';
   }
 
   // Make request

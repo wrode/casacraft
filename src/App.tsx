@@ -1,27 +1,22 @@
-import { createSignal, Show, createEffect } from 'solid-js';
-import type { ViewState, StylePreset, Annotation, RenderState, LocalProject } from './types';
+import { createSignal, Show, For } from 'solid-js';
+import type { ViewState, StylePreset, RenderState, LocalProject } from './types';
 import { generateId, generateSecretToken, getOrCreateClientId } from './utils/fileUtils';
 import { STYLE_CONFIGS, getStyleConfig } from './utils/promptBuilder';
 import FileUpload from './components/FileUpload';
-import FloorplanPreview from './components/FloorplanPreview';
-import AnnotationLayer from './components/AnnotationLayer';
 import RenderCanvas from './components/RenderCanvas';
-import StyleSelector from './components/StyleSelector';
 import ProjectHistory from './components/ProjectHistory';
 
 export default function App() {
-  // View state
+  // View state - simplified: upload | generating | render
   const [viewState, setViewState] = createSignal<ViewState>('upload');
 
   // File state
   const [imageData, setImageData] = createSignal<string | null>(null);
   const [fileName, setFileName] = createSignal<string>('');
 
-  // Annotation state
-  const [annotations, setAnnotations] = createSignal<Annotation[]>([]);
-
   // Style state
   const [selectedStyle, setSelectedStyle] = createSignal<StylePreset>('modern');
+  const [showStylePicker, setShowStylePicker] = createSignal(false);
 
   // Render state
   const [renderState, setRenderState] = createSignal<RenderState>('idle');
@@ -32,23 +27,24 @@ export default function App() {
   // Project state
   const [currentProject, setCurrentProject] = createSignal<LocalProject | null>(null);
 
-  // Handle file upload
+  // History panel
+  const [showHistory, setShowHistory] = createSignal(false);
+
+  // Handle file upload - go directly to generation
   const handleFileSelect = (dataUrl: string, name: string) => {
     setImageData(dataUrl);
     setFileName(name);
-    setViewState('preview');
-  };
-
-  // Handle continue to annotate
-  const handleContinueToAnnotate = () => {
-    setViewState('annotate');
+    // Auto-start generation
+    handleGenerateRender(dataUrl, name);
   };
 
   // Handle generate render
-  const handleGenerateRender = async () => {
-    const image = imageData();
-    if (!image) return;
+  const handleGenerateRender = async (image?: string, name?: string) => {
+    const img = image || imageData();
+    const fName = name || fileName();
+    if (!img) return;
 
+    setViewState('generating');
     setRenderState('generating');
     setRenderProgress(0);
     setRenderError(null);
@@ -67,9 +63,9 @@ export default function App() {
     try {
       // Import and call AI generation
       const { generateIsometricRender } = await import('./api/openrouter');
-      const result = await generateIsometricRender(image, {
+      const result = await generateIsometricRender(img, {
         style: selectedStyle(),
-        annotations: annotations()
+        annotations: [] // No annotations in simplified flow
       });
 
       clearInterval(progressInterval);
@@ -86,13 +82,13 @@ export default function App() {
           clientId: getOrCreateClientId(),
           secretToken: generateSecretToken(),
           originalFileUrl: '',
-          originalFileName: fileName(),
+          originalFileName: fName,
           renderUrl: '',
-          annotations: annotations(),
+          annotations: [],
           style: selectedStyle(),
           createdAt: Date.now(),
           updatedAt: Date.now(),
-          originalFileData: image,
+          originalFileData: img,
           renderData: result.image
         };
         setCurrentProject(project);
@@ -108,20 +104,7 @@ export default function App() {
       console.error('Generation failed:', err);
       setRenderError(err instanceof Error ? err.message : 'Generation failed');
       setRenderState('error');
-    }
-  };
-
-  // Handle back navigation
-  const handleBack = () => {
-    const current = viewState();
-    if (current === 'preview') {
       setViewState('upload');
-      setImageData(null);
-      setFileName('');
-    } else if (current === 'annotate') {
-      setViewState('preview');
-    } else if (current === 'render') {
-      setViewState('annotate');
     }
   };
 
@@ -130,10 +113,19 @@ export default function App() {
     setViewState('upload');
     setImageData(null);
     setFileName('');
-    setAnnotations([]);
     setRenderResult(null);
     setRenderState('idle');
     setCurrentProject(null);
+    setShowStylePicker(false);
+    setShowHistory(false);
+  };
+
+  // Handle regenerate with different style
+  const handleRegenerate = () => {
+    const img = imageData();
+    if (img) {
+      handleGenerateRender(img, fileName());
+    }
   };
 
   // Handle project load from history
@@ -142,7 +134,6 @@ export default function App() {
       setImageData(project.originalFileData);
     }
     setFileName(project.originalFileName);
-    setAnnotations(project.annotations);
     setSelectedStyle(project.style);
 
     if (project.renderData) {
@@ -150,16 +141,10 @@ export default function App() {
       setRenderState('done');
       setViewState('render');
     } else {
-      setViewState('preview');
+      setViewState('upload');
     }
     setCurrentProject(project);
-  };
-
-  // Handle regenerate
-  const handleRegenerate = () => {
-    setViewState('annotate');
-    setRenderResult(null);
-    setRenderState('idle');
+    setShowHistory(false);
   };
 
   // Get current style config
@@ -167,167 +152,149 @@ export default function App() {
 
   return (
     <div class="app">
-      {/* Header - shown in all states except upload */}
-      <Show when={viewState() !== 'upload'}>
-        <header class="header">
-          <button class="back-button" onClick={handleBack}>
-            ← Tilbake
-          </button>
-          <h1>CasaCraft</h1>
-        </header>
-      </Show>
-
-      <main class="main">
+      <main class="main-content">
         {/* Upload page */}
         <Show when={viewState() === 'upload'}>
           <div class="upload-page">
             <div class="upload-hero">
-              <div class="logo-mark">CasaCraft</div>
-              <p class="tagline">Last opp en plantegning for å komme i gang</p>
+              <div class="logo-mark">Beautiful Room</div>
+              <p class="tagline">Transform floor plans into stunning 3D renders</p>
               <FileUpload onFileSelect={handleFileSelect} />
-            </div>
-          </div>
-        </Show>
 
-        {/* Preview page */}
-        <Show when={viewState() === 'preview'}>
-          <div class="content-area">
-            <FloorplanPreview
-              imageData={imageData()!}
-              onImageChange={setImageData}
-            />
-          </div>
-          <aside class="sidebar">
-            <div class="sidebar-section">
-              <h3>Plantegning</h3>
-              <p>{fileName()}</p>
-            </div>
-
-            <div class="sidebar-section">
-              <h3>Neste steg</h3>
-              <p>Du kan legge til merknader på plantegningen, eller gå direkte til generering.</p>
-              <button class="generate-btn" onClick={handleContinueToAnnotate}>
-                Fortsett til merknader
-              </button>
-            </div>
-          </aside>
-        </Show>
-
-        {/* Annotate page */}
-        <Show when={viewState() === 'annotate'}>
-          <div class="content-area">
-            <div class="preview-container">
-              <Show when={imageData()}>
-                <img src={imageData()!} alt="Plantegning" class="preview-image" />
-                <AnnotationLayer
-                  annotations={annotations()}
-                  onAnnotationsChange={setAnnotations}
-                />
-              </Show>
-            </div>
-
-            {/* Loading overlay */}
-            <Show when={renderState() === 'generating'}>
-              <div class="loading-overlay">
-                <div class="loading-card">
-                  <div class="loading-icon">
-                    <svg viewBox="0 0 100 100" class="progress-ring">
-                      <circle class="progress-ring-bg" cx="50" cy="50" r="42" />
-                      <circle
-                        class="progress-ring-fill"
-                        cx="50"
-                        cy="50"
-                        r="42"
-                        style={{
-                          'stroke-dasharray': `${2 * Math.PI * 42}`,
-                          'stroke-dashoffset': `${2 * Math.PI * 42 * (1 - renderProgress() / 100)}`
-                        }}
-                      />
-                    </svg>
-                    <span class="progress-text">{Math.round(renderProgress())}%</span>
-                  </div>
-                  <h3>Genererer 3D-visning</h3>
-                  <p class="loading-hint">
-                    {renderProgress() < 20 && 'Analyserer plantegning...'}
-                    {renderProgress() >= 20 && renderProgress() < 40 && 'Identifiserer rom...'}
-                    {renderProgress() >= 40 && renderProgress() < 60 && 'Plasserer møbler...'}
-                    {renderProgress() >= 60 && renderProgress() < 80 && 'Legger til detaljer...'}
-                    {renderProgress() >= 80 && 'Siste finpuss...'}
-                  </p>
+              <Show when={renderError()}>
+                <div class="error-message">
+                  {renderError()}
                 </div>
-              </div>
-            </Show>
-          </div>
-
-          <aside class="sidebar">
-            <div class="sidebar-section">
-              <h3>Rommerknader</h3>
-              <p>Legg til etiketter for rommene for bedre resultat.</p>
-              <Show when={annotations().length > 0}>
-                <p style={{ 'margin-top': '0.5rem', 'font-weight': '500' }}>
-                  {annotations().length} merknad{annotations().length !== 1 ? 'er' : ''}
-                </p>
               </Show>
             </div>
+          </div>
+        </Show>
 
-            <StyleSelector
-              value={selectedStyle()}
-              onChange={setSelectedStyle}
-            />
-
-            <button
-              class="generate-btn"
-              onClick={handleGenerateRender}
-              disabled={renderState() === 'generating'}
-            >
-              {renderState() === 'generating' ? 'Genererer...' : 'Generer 3D-visning'}
-            </button>
-
-            <Show when={renderError()}>
-              <div class="error-message">
-                {renderError()}
+        {/* Generating page */}
+        <Show when={viewState() === 'generating'}>
+          <div class="generating-page">
+            <div class="loading-card">
+              <div class="loading-icon">
+                <svg viewBox="0 0 100 100" class="progress-ring">
+                  <circle class="progress-ring-bg" cx="50" cy="50" r="42" />
+                  <circle
+                    class="progress-ring-fill"
+                    cx="50"
+                    cy="50"
+                    r="42"
+                    style={{
+                      'stroke-dasharray': `${2 * Math.PI * 42}`,
+                      'stroke-dashoffset': `${2 * Math.PI * 42 * (1 - renderProgress() / 100)}`
+                    }}
+                  />
+                </svg>
+                <span class="progress-text">{Math.round(renderProgress())}%</span>
               </div>
-            </Show>
-
-            <ProjectHistory onLoadProject={handleLoadProject} />
-          </aside>
+              <h3>Creating your 3D room</h3>
+              <p class="loading-hint">
+                {renderProgress() < 20 && 'Analyzing floor plan...'}
+                {renderProgress() >= 20 && renderProgress() < 40 && 'Identifying rooms...'}
+                {renderProgress() >= 40 && renderProgress() < 60 && 'Placing furniture...'}
+                {renderProgress() >= 60 && renderProgress() < 80 && 'Adding details...'}
+                {renderProgress() >= 80 && 'Final touches...'}
+              </p>
+            </div>
+          </div>
         </Show>
 
         {/* Render result page */}
         <Show when={viewState() === 'render'}>
-          <div class="content-area">
-            <RenderCanvas
-              imageData={renderResult()!}
-              onRegenerate={handleRegenerate}
-              onNewRender={handleNewRender}
-              project={currentProject()}
-            />
-          </div>
-
-          <aside class="sidebar">
-            <div class="sidebar-section">
-              <h3>Resultat</h3>
-              <p>Din 3D-visning er klar! Du kan laste ned eller dele resultatet.</p>
-            </div>
-
-            <div class="sidebar-section">
-              <h3>Stil</h3>
-              <p>{currentStyleConfig().label}</p>
-              <p class="style-description">{currentStyleConfig().description}</p>
-            </div>
-
-            <button class="btn-secondary" style={{ width: '100%', 'margin-top': '1rem' }} onClick={handleRegenerate}>
-              Juster og generer på nytt
-            </button>
-
-            <button class="generate-btn" onClick={handleNewRender}>
-              Ny plantegning
-            </button>
-
-            <ProjectHistory onLoadProject={handleLoadProject} />
-          </aside>
+          <RenderCanvas
+            imageData={renderResult()!}
+            onRegenerate={handleRegenerate}
+            onNewRender={handleNewRender}
+            project={currentProject()}
+          />
         </Show>
       </main>
+
+      {/* Bottom bar - shown on upload and render pages */}
+      <Show when={viewState() === 'upload' || viewState() === 'render'}>
+        <div class="bottom-bar">
+          {/* Style picker button */}
+          <button
+            class="bottom-bar-btn"
+            onClick={() => { setShowStylePicker(!showStylePicker()); setShowHistory(false); }}
+          >
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+            <span>{currentStyleConfig().label}</span>
+          </button>
+
+          {/* History button */}
+          <button
+            class="bottom-bar-btn"
+            onClick={() => { setShowHistory(!showHistory()); setShowStylePicker(false); }}
+          >
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12,6 12,12 16,14" />
+            </svg>
+            <span>History</span>
+          </button>
+
+          {/* New render button - only on render page */}
+          <Show when={viewState() === 'render'}>
+            <button
+              class="bottom-bar-btn primary"
+              onClick={handleNewRender}
+            >
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="5" x2="12" y2="19" />
+                <line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              <span>New</span>
+            </button>
+          </Show>
+        </div>
+
+        {/* Style picker panel */}
+        <Show when={showStylePicker()}>
+          <div class="bottom-panel">
+            <div class="panel-header">
+              <h3>Choose Style</h3>
+              <button class="close-btn" onClick={() => setShowStylePicker(false)}>×</button>
+            </div>
+            <div class="style-grid">
+              <For each={STYLE_CONFIGS}>
+                {(style) => (
+                  <button
+                    class={`style-option ${selectedStyle() === style.value ? 'active' : ''}`}
+                    onClick={() => {
+                      setSelectedStyle(style.value as StylePreset);
+                      setShowStylePicker(false);
+                      // If on render page, regenerate with new style
+                      if (viewState() === 'render' && imageData()) {
+                        handleRegenerate();
+                      }
+                    }}
+                  >
+                    <span class="style-name">{style.label}</span>
+                    <span class="style-desc">{style.description}</span>
+                  </button>
+                )}
+              </For>
+            </div>
+          </div>
+        </Show>
+
+        {/* History panel */}
+        <Show when={showHistory()}>
+          <div class="bottom-panel">
+            <div class="panel-header">
+              <h3>Recent Projects</h3>
+              <button class="close-btn" onClick={() => setShowHistory(false)}>×</button>
+            </div>
+            <ProjectHistory onLoadProject={handleLoadProject} />
+          </div>
+        </Show>
+      </Show>
     </div>
   );
 }

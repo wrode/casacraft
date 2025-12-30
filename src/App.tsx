@@ -321,32 +321,22 @@ export default function App() {
         </Show>
       </main>
 
-      {/* Bottom bar - shown on upload and render pages */}
-      <Show when={viewState() === 'upload' || viewState() === 'render'}>
+      {/* Bottom bar - only shown on render page */}
+      <Show when={viewState() === 'render'}>
         <div class="bottom-bar">
-          {/* Download button - only on render page */}
-          <Show when={viewState() === 'render'}>
-            <button
-              class="bottom-bar-btn"
-              onClick={handleDownload}
-            >
-              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span>Download</span>
-            </button>
-          </Show>
+          <button class="bottom-bar-btn" onClick={handleDownload}>
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Download</span>
+          </button>
 
-          {/* New render button */}
-          <button
-            class={`bottom-bar-btn ${viewState() === 'render' ? 'primary' : ''}`}
-            onClick={handleNewRender}
-          >
+          <button class="bottom-bar-btn primary" onClick={handleNewRender}>
             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
-            <span>{viewState() === 'upload' ? 'Upload' : 'New'}</span>
+            <span>New</span>
           </button>
         </div>
       </Show>

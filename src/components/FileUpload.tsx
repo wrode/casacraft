@@ -1,4 +1,4 @@
-import { createSignal, Show } from 'solid-js';
+import { createSignal, Show, onMount, onCleanup } from 'solid-js';
 import { validateFile } from '../utils/fileUtils';
 
 interface FileUploadProps {
@@ -25,7 +25,7 @@ export default function FileUpload(props: FileUploadProps) {
     const validation = await validateFile(file);
 
     if (!validation.valid) {
-      setError(validation.error || 'Ukjent feil');
+      setError(validation.error || 'Unknown error');
       return;
     }
 
@@ -35,6 +35,34 @@ export default function FileUpload(props: FileUploadProps) {
       size: formatFileSize(file.size)
     });
   };
+
+  // Handle clipboard paste
+  const handlePaste = async (e: ClipboardEvent) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        e.preventDefault();
+        const file = item.getAsFile();
+        if (file) {
+          // Create a named file from clipboard
+          const namedFile = new File([file], `pasted-image-${Date.now()}.png`, { type: file.type });
+          handleFile(namedFile);
+        }
+        break;
+      }
+    }
+  };
+
+  // Add paste listener on mount
+  onMount(() => {
+    document.addEventListener('paste', handlePaste);
+  });
+
+  onCleanup(() => {
+    document.removeEventListener('paste', handlePaste);
+  });
 
   const handleDrop = (e: DragEvent) => {
     e.preventDefault();
@@ -98,26 +126,26 @@ export default function FileUpload(props: FileUploadProps) {
         <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m0-12L8 8m4-4l4 4" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
-        <h3>Dra og slipp plantegning her</h3>
-        <p>eller</p>
+        <h3>Drop your floor plan here</h3>
+        <p>or paste from clipboard (Ctrl+V)</p>
         <button class="upload-button" type="button">
-          Velg fil
+          Choose File
         </button>
-        <p class="upload-formats">PNG, JPEG eller AVIF, maks 10 MB</p>
+        <p class="upload-formats">PNG, JPEG or AVIF, max 10 MB</p>
       </Show>
 
       <Show when={preview()}>
         <div class="upload-preview" onClick={(e) => e.stopPropagation()}>
-          <img src={preview()!.dataUrl} alt="Forhåndsvisning" />
+          <img src={preview()!.dataUrl} alt="Preview" />
           <div class="upload-preview-info">
             <h4>{preview()!.name}</h4>
             <p>{preview()!.size}</p>
             <div class="upload-preview-actions">
               <button class="btn-secondary" onClick={handleClear}>
-                Fjern
+                Clear
               </button>
               <button class="btn-primary" onClick={handleContinue}>
-                Fortsett
+                Generate
               </button>
             </div>
           </div>

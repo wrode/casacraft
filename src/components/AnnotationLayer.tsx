@@ -1,4 +1,4 @@
-import { createSignal, createEffect, For, Show } from 'solid-js';
+import { createSignal, createEffect, For, Index, Show } from 'solid-js';
 import type { Annotation, AnnotationType, Point } from '../types';
 
 interface AnnotationLayerProps {
@@ -373,30 +373,30 @@ export default function AnnotationLayer(props: AnnotationLayerProps) {
       </svg>
 
       {/* Label annotations */}
-      <For each={props.annotations}>
+      <Index each={props.annotations}>
         {(annotation) => (
-          <Show when={annotation.type === 'label'}>
+          <Show when={annotation().type === 'label'}>
             <div
-              class={`annotation-label ${selectedId() === annotation.id ? 'selected' : ''}`}
+              class={`annotation-label ${selectedId() === annotation().id ? 'selected' : ''}`}
               style={{
-                left: `${annotation.x}%`,
-                top: `${annotation.y}%`
+                left: `${annotation().x}%`,
+                top: `${annotation().y}%`
               }}
-              onMouseDown={(e) => startDrag(annotation.id, 'whole', e)}
-              onClick={(e) => selectAnnotation(annotation.id, e)}
+              onMouseDown={(e) => startDrag(annotation().id, 'whole', e)}
+              onClick={(e) => selectAnnotation(annotation().id, e)}
             >
               <input
                 type="text"
                 placeholder="Romnavn..."
-                value={annotation.text || ''}
-                onInput={(e) => updateText(annotation.id, e.currentTarget.value)}
+                value={annotation().text || ''}
+                onInput={(e) => updateText(annotation().id, e.currentTarget.value)}
                 onKeyDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
               />
-              <Show when={selectedId() === annotation.id}>
+              <Show when={selectedId() === annotation().id}>
                 <button
-                  onClick={(e) => { e.stopPropagation(); deleteAnnotation(annotation.id); }}
+                  onClick={(e) => { e.stopPropagation(); deleteAnnotation(annotation().id); }}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -412,33 +412,33 @@ export default function AnnotationLayer(props: AnnotationLayerProps) {
             </div>
           </Show>
         )}
-      </For>
+      </Index>
 
       {/* Keep/Change markers */}
-      <For each={props.annotations}>
+      <Index each={props.annotations}>
         {(annotation) => (
-          <Show when={annotation.type === 'keep' || annotation.type === 'change'}>
+          <Show when={annotation().type === 'keep' || annotation().type === 'change'}>
             <div
-              class={`annotation-label ${annotation.type} ${selectedId() === annotation.id ? 'selected' : ''}`}
+              class={`annotation-label ${annotation().type} ${selectedId() === annotation().id ? 'selected' : ''}`}
               style={{
-                left: `${annotation.x}%`,
-                top: `${annotation.y}%`
+                left: `${annotation().x}%`,
+                top: `${annotation().y}%`
               }}
-              onMouseDown={(e) => startDrag(annotation.id, 'whole', e)}
-              onClick={(e) => selectAnnotation(annotation.id, e)}
+              onMouseDown={(e) => startDrag(annotation().id, 'whole', e)}
+              onClick={(e) => selectAnnotation(annotation().id, e)}
             >
               <input
                 type="text"
-                placeholder={annotation.type === 'keep' ? 'Behold...' : 'Endre...'}
-                value={annotation.text || ''}
-                onInput={(e) => updateText(annotation.id, e.currentTarget.value)}
+                placeholder={annotation().type === 'keep' ? 'Behold...' : 'Endre...'}
+                value={annotation().text || ''}
+                onInput={(e) => updateText(annotation().id, e.currentTarget.value)}
                 onKeyDown={(e) => e.stopPropagation()}
                 onClick={(e) => e.stopPropagation()}
                 onMouseDown={(e) => e.stopPropagation()}
               />
-              <Show when={selectedId() === annotation.id}>
+              <Show when={selectedId() === annotation().id}>
                 <button
-                  onClick={(e) => { e.stopPropagation(); deleteAnnotation(annotation.id); }}
+                  onClick={(e) => { e.stopPropagation(); deleteAnnotation(annotation().id); }}
                   style={{
                     background: 'none',
                     border: 'none',
@@ -454,7 +454,7 @@ export default function AnnotationLayer(props: AnnotationLayerProps) {
             </div>
           </Show>
         )}
-      </For>
+      </Index>
 
       {/* Hint */}
       <Show when={props.annotations.length === 0 && !isDrawing() && activeTool() === 'select'}>

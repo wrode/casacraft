@@ -26,8 +26,11 @@ CRITICAL - NO TEXT OR LABELS:
 - The output must be a pure 3D render with NO overlaid text whatsoever
 - No room labels, no dimension text, no watermarks, no captions
 
-FURNISHING AND QUALITY:
-Use colorful, modern furniture and decorative objects in each room—sofas, beds, tables, cabinets, lamps, plants, rugs, appliances—arranged realistically and in scale. High-resolution, photorealistic materials (wood floors, tiles, fabrics, glass). Soft global lighting, subtle shadows, crisp edges. Professional, polished, high-quality output.`;
+FURNISHING:
+Include appropriate furniture and decorative objects in each room—sofas, beds, tables, cabinets, lamps, plants, rugs, appliances—arranged realistically and in scale.
+
+QUALITY:
+High-resolution, photorealistic materials (wood floors, tiles, fabrics, glass). Soft global lighting, subtle shadows, crisp edges. Professional, polished, high-quality output.`;
 
 // Style configurations
 export const STYLE_CONFIGS: StyleConfig[] = [
@@ -35,31 +38,31 @@ export const STYLE_CONFIGS: StyleConfig[] = [
     value: 'modern',
     label: 'Moderne minimalistisk',
     description: 'Rene linjer, nøytrale farger, minimalt med dekor',
-    promptSuffix: 'Modern minimalist style with clean lines, neutral colors (white, gray, black), sleek furniture, and minimal decorations. Contemporary Scandinavian influence.'
+    promptSuffix: 'Modern minimalist style. Sleek, contemporary furniture with clean lines. Neutral color palette (white, gray, black, beige). Minimal decorations. Low-profile sofas, simple dining tables, platform beds. Contemporary Scandinavian influence.'
   },
   {
     value: 'scandinavian',
     label: 'Skandinavisk koselig',
     description: 'Varme toner, tre, tekstiler og hygge',
-    promptSuffix: 'Warm Scandinavian hygge style with light wood floors, cozy textiles, soft lighting, plants, and warm neutral tones. Comfortable and inviting atmosphere.'
+    promptSuffix: 'Warm Scandinavian hygge style. Light wood furniture (oak, birch), cozy textiles (wool throws, sheepskin rugs), soft lighting, many plants, warm neutral tones. Comfortable sofas with cushions, wooden dining sets. Inviting and cozy atmosphere.'
   },
   {
     value: 'industrial',
     label: 'Industriell loft',
     description: 'Rå materialer, metall, eksponert murstein',
-    promptSuffix: 'Industrial loft style with exposed brick, metal fixtures, dark wood, leather furniture, and urban aesthetic. Raw materials and warehouse vibes.'
+    promptSuffix: 'Industrial loft style. Metal and reclaimed wood furniture, leather sofas, exposed brick textures, dark wood floors. Edison bulb lighting, metal shelving, raw materials. Urban warehouse aesthetic with character.'
   },
   {
     value: 'traditional',
     label: 'Tradisjonell elegant',
     description: 'Klassisk design, rike farger, ornamenterte detaljer',
-    promptSuffix: 'Traditional elegant style with classic furniture, rich colors (burgundy, navy, forest green), ornate details, and timeless sophistication.'
+    promptSuffix: 'Traditional elegant style. Classic wooden furniture with ornate details, rich upholstery in burgundy, navy, and forest green. Antique-style pieces, carved wood details, elegant chandeliers, Persian rugs, crown molding. Timeless sophistication and warmth.'
   },
   {
     value: 'colorful',
     label: 'Fargerik leken',
     description: 'Levende farger, mønstrede tekstiler, kreativ',
-    promptSuffix: 'Playful colorful style with vibrant colors, patterned textiles, eclectic furniture mix, and creative artistic touches. Fun and energetic atmosphere.'
+    promptSuffix: 'Playful colorful style. Vibrant, bold colors throughout. Patterned textiles, eclectic furniture mix, creative artistic touches. Bright sofas, colorful accent chairs, fun decorative objects. Energetic and cheerful atmosphere.'
   }
 ];
 

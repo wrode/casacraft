@@ -1,8 +1,10 @@
 import { createSignal, Show, For } from 'solid-js';
-import type { StylePreset, RenderState, LocalProject } from './types';
+import type { StylePreset, LocalProject, DetectedRoom } from './types';
 import { generateId, generateSecretToken, getOrCreateClientId } from './utils/fileUtils';
 import { getStyleConfig } from './utils/promptBuilder';
 import FileUpload from './components/FileUpload';
+import RoomOverlay from './components/RoomOverlay';
+import RoomEditPanel from './components/RoomEditPanel';
 
 // The two styles we auto-generate
 const AUTO_STYLES: StylePreset[] = ['modern', 'traditional'];
@@ -15,8 +17,8 @@ interface GalleryImage {
 }
 
 export default function App() {
-  // View state - simplified: upload | generating | render
-  const [viewState, setViewState] = createSignal<'upload' | 'generating' | 'render'>('upload');
+  // View state
+  const [viewState, setViewState] = createSignal<'upload' | 'generating' | 'render' | 'editing'>('upload');
 
   // File state
   const [imageData, setImageData] = createSignal<string | null>(null);
@@ -25,11 +27,16 @@ export default function App() {
   // Render state
   const [renderProgress, setRenderProgress] = createSignal(0);
   const [renderError, setRenderError] = createSignal<string | null>(null);
-  const [generatingCount, setGeneratingCount] = createSignal(0);
 
   // Gallery state - original + renders
   const [galleryImages, setGalleryImages] = createSignal<GalleryImage[]>([]);
   const [currentIndex, setCurrentIndex] = createSignal(0);
+
+  // Room editing state
+  const [detectedRooms, setDetectedRooms] = createSignal<DetectedRoom[]>([]);
+  const [selectedRoom, setSelectedRoom] = createSignal<DetectedRoom | null>(null);
+  const [isDetectingRooms, setIsDetectingRooms] = createSignal(false);
+  const [isInpainting, setIsInpainting] = createSignal(false);
 
   // Touch/swipe state
   let touchStartX = 0;
@@ -47,7 +54,6 @@ export default function App() {
     setViewState('generating');
     setRenderProgress(0);
     setRenderError(null);
-    setGeneratingCount(AUTO_STYLES.length);
 
     // Start with original image in gallery
     setGalleryImages([{
@@ -142,6 +148,73 @@ export default function App() {
     }
   };
 
+  // Handle entering edit mode
+  const handleEnterEditMode = async () => {
+    const current = currentImage();
+    if (!current || current.type === 'original') return;
+
+    setViewState('editing');
+    setSelectedRoom(null);
+
+    // Detect rooms if not already done
+    if (detectedRooms().length === 0) {
+      setIsDetectingRooms(true);
+      try {
+        const { detectRooms } = await import('./api/rooms');
+        const result = await detectRooms(current.data);
+        setDetectedRooms(result.rooms);
+      } catch (err) {
+        console.error('Room detection failed:', err);
+        // Use mock rooms for demo
+        setDetectedRooms(getMockRooms());
+      } finally {
+        setIsDetectingRooms(false);
+      }
+    }
+  };
+
+  // Handle exiting edit mode
+  const handleExitEditMode = () => {
+    setViewState('render');
+    setSelectedRoom(null);
+  };
+
+  // Handle room selection
+  const handleRoomClick = (room: DetectedRoom) => {
+    setSelectedRoom(room);
+  };
+
+  // Handle room inpainting
+  const handleInpaint = async (prompt: string, strength: number) => {
+    const room = selectedRoom();
+    const current = currentImage();
+    if (!room || !current) return;
+
+    setIsInpainting(true);
+    try {
+      const { inpaintRoom } = await import('./api/rooms');
+      const result = await inpaintRoom(current.data, room, prompt, strength);
+
+      // Update the current image with the inpainted result
+      const images = galleryImages();
+      const idx = currentIndex();
+      const newImages = [...images];
+      newImages[idx] = {
+        ...newImages[idx],
+        data: result.fullImageUrl
+      };
+      setGalleryImages(newImages);
+
+      // Close the edit panel
+      setSelectedRoom(null);
+    } catch (err) {
+      console.error('Inpainting failed:', err);
+      alert('Failed to update room. Please try again.');
+    } finally {
+      setIsInpainting(false);
+    }
+  };
+
   // Handle new render
   const handleNewRender = () => {
     setViewState('upload');
@@ -150,6 +223,8 @@ export default function App() {
     setGalleryImages([]);
     setCurrentIndex(0);
     setRenderError(null);
+    setDetectedRooms([]);
+    setSelectedRoom(null);
   };
 
   // Download current image
@@ -183,10 +258,8 @@ export default function App() {
 
     if (Math.abs(diff) > threshold) {
       if (diff > 0 && currentIndex() < images.length - 1) {
-        // Swipe left - next image
         setCurrentIndex(i => i + 1);
       } else if (diff < 0 && currentIndex() > 0) {
-        // Swipe right - previous image
         setCurrentIndex(i => i - 1);
       }
     }
@@ -212,6 +285,14 @@ export default function App() {
 
   // Get current image
   const currentImage = () => galleryImages()[currentIndex()];
+
+  // Mock rooms for demo (used when API is not available)
+  const getMockRooms = (): DetectedRoom[] => [
+    { id: 'room-1', label: 'Living Room', confidence: 0.95, bbox: { x: 10, y: 10, width: 35, height: 40 }, polygon: [{ x: 10, y: 10 }, { x: 45, y: 10 }, { x: 45, y: 50 }, { x: 10, y: 50 }], featherPx: 12 },
+    { id: 'room-2', label: 'Kitchen', confidence: 0.92, bbox: { x: 50, y: 10, width: 40, height: 35 }, polygon: [{ x: 50, y: 10 }, { x: 90, y: 10 }, { x: 90, y: 45 }, { x: 50, y: 45 }], featherPx: 12 },
+    { id: 'room-3', label: 'Bedroom', confidence: 0.89, bbox: { x: 10, y: 55, width: 40, height: 35 }, polygon: [{ x: 10, y: 55 }, { x: 50, y: 55 }, { x: 50, y: 90 }, { x: 10, y: 90 }], featherPx: 12 },
+    { id: 'room-4', label: 'Bathroom', confidence: 0.87, bbox: { x: 55, y: 50, width: 35, height: 40 }, polygon: [{ x: 55, y: 50 }, { x: 90, y: 50 }, { x: 90, y: 90 }, { x: 55, y: 90 }], featherPx: 12 },
+  ];
 
   return (
     <div class="app">
@@ -273,7 +354,6 @@ export default function App() {
             onTouchMove={handleTouchMove}
             onTouchEnd={handleTouchEnd}
           >
-            {/* Current image */}
             <div class="gallery-image-wrapper">
               <Show when={currentImage()}>
                 <img
@@ -319,9 +399,59 @@ export default function App() {
             </div>
           </div>
         </Show>
+
+        {/* Editing mode */}
+        <Show when={viewState() === 'editing'}>
+          <div class="editing-container">
+            <div class="editing-image-wrapper">
+              <Show when={currentImage()}>
+                <img
+                  src={currentImage()!.data}
+                  alt={currentImage()!.label}
+                  class="editing-image"
+                  draggable={false}
+                />
+                {/* Room overlay */}
+                <Show when={!isDetectingRooms()}>
+                  <RoomOverlay
+                    rooms={detectedRooms()}
+                    selectedRoomId={selectedRoom()?.id || null}
+                    onRoomClick={handleRoomClick}
+                    imageWidth={1024}
+                    imageHeight={1024}
+                  />
+                </Show>
+                {/* Loading indicator for room detection */}
+                <Show when={isDetectingRooms()}>
+                  <div class="detecting-rooms">
+                    <div class="spinner" />
+                    <span>Detecting rooms...</span>
+                  </div>
+                </Show>
+              </Show>
+            </div>
+
+            {/* Edit panel */}
+            <Show when={selectedRoom()}>
+              <RoomEditPanel
+                room={selectedRoom()!}
+                onInpaint={handleInpaint}
+                onClose={() => setSelectedRoom(null)}
+                isProcessing={isInpainting()}
+              />
+            </Show>
+
+            {/* Instruction hint */}
+            <Show when={!selectedRoom() && !isDetectingRooms()}>
+              <div class="editing-hint">
+                Tap a room to edit it
+              </div>
+            </Show>
+          </div>
+        </Show>
       </main>
 
-      {/* Bottom bar - only shown on render page */}
+      {/* Bottom bar - render page */}
       <Show when={viewState() === 'render'}>
         <div class="bottom-bar">
           <button class="bottom-bar-btn" onClick={handleDownload}>
@@ -331,12 +461,41 @@ export default function App() {
             <span>Download</span>
           </button>
 
+          <Show when={currentImage()?.type === 'render'}>
+            <button class="bottom-bar-btn" onClick={handleEnterEditMode}>
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <span>Edit</span>
+            </button>
+          </Show>
+
           <button class="bottom-bar-btn primary" onClick={handleNewRender}>
             <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="12" y1="5" x2="12" y2="19" />
               <line x1="5" y1="12" x2="19" y2="12" />
             </svg>
             <span>New</span>
+          </button>
+        </div>
+      </Show>
+
+      {/* Bottom bar - editing mode */}
+      <Show when={viewState() === 'editing'}>
+        <div class="bottom-bar">
+          <button class="bottom-bar-btn" onClick={handleExitEditMode}>
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15,18 9,12 15,6" />
+            </svg>
+            <span>Back</span>
+          </button>
+
+          <button class="bottom-bar-btn" onClick={handleDownload}>
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Download</span>
           </button>
         </div>
       </Show>

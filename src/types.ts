@@ -16,7 +16,7 @@ export type RenderState =
   | 'error';
 
 // View states for the main app
-export type ViewState = 'upload' | 'generating' | 'render';
+export type ViewState = 'upload' | 'generating' | 'render' | 'editing';
 
 // Annotation types
 export type AnnotationType = 'label' | 'arrow' | 'keep' | 'change' | 'path';
@@ -106,4 +106,54 @@ export interface AIModel {
   id: string;
   name: string;
   description: string;
+}
+
+// Room detection types
+export interface BoundingBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface DetectedRoom {
+  id: string;
+  label: string;
+  confidence: number;
+  bbox: BoundingBox;
+  polygon: Point[];
+  maskUrl?: string;
+  featherPx: number;
+}
+
+export interface RoomDetectionResult {
+  rooms: DetectedRoom[];
+  imageWidth: number;
+  imageHeight: number;
+}
+
+// Room inpainting types
+export interface RoomEditState {
+  roomId: string;
+  prompt: string;
+  strength: number;
+  seed?: number;
+  previewUrl?: string;
+  finalUrl?: string;
+}
+
+export interface InpaintRequest {
+  imageUrl: string;
+  roomId: string;
+  bbox: BoundingBox;
+  maskUrl: string;
+  prompt: string;
+  strength?: number;
+  seed?: number;
+}
+
+export interface InpaintResult {
+  cropUrl: string;
+  fullImageUrl: string;
+  roomId: string;
 }

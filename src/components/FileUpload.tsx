@@ -127,7 +127,7 @@ export default function FileUpload(props: FileUploadProps) {
           <path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 4v12m0-12L8 8m4-4l4 4" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         <h3>Drop your floor plan here</h3>
-        <p>or paste from clipboard (Ctrl+V)</p>
+        <p class="paste-hint">or paste from clipboard (Ctrl+V)</p>
         <button class="upload-button" type="button">
           Choose File
         </button>

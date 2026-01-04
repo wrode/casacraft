@@ -1,24 +1,20 @@
 import type { RoomDetectionResult, DetectedRoom, InpaintResult, BoundingBox } from '../types';
 
-// API URLs - use serverless function in production, direct API in development
-const DETECT_URL = import.meta.env.DEV
-  ? '/api/rooms/detect'
-  : '/api/rooms/detect';
-
-const INPAINT_URL = import.meta.env.DEV
-  ? '/api/rooms/inpaint'
-  : '/api/rooms/inpaint';
+// API URLs
+const DETECT_2D_URL = '/api/rooms/detect-2d';
+const INPAINT_URL = '/api/rooms/inpaint';
 
 /**
- * Detect rooms in an image
+ * Detect rooms from a 2D floor plan image using vision AI
+ * This should be called on the ORIGINAL floor plan, not the 3D render
  */
-export async function detectRooms(imageUrl: string): Promise<RoomDetectionResult> {
-  const response = await fetch(DETECT_URL, {
+export async function detectRoomsFrom2D(imageData: string): Promise<RoomDetectionResult> {
+  const response = await fetch(DETECT_2D_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ imageUrl })
+    body: JSON.stringify({ imageData })
   });
 
   if (!response.ok) {
@@ -27,6 +23,14 @@ export async function detectRooms(imageUrl: string): Promise<RoomDetectionResult
   }
 
   return response.json();
+}
+
+/**
+ * @deprecated Use detectRoomsFrom2D instead - detects on original floor plan
+ */
+export async function detectRooms(imageUrl: string): Promise<RoomDetectionResult> {
+  // Redirect to 2D detection
+  return detectRoomsFrom2D(imageUrl);
 }
 
 /**

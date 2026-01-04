@@ -37,6 +37,7 @@ export default function App() {
   const [selectedRoom, setSelectedRoom] = createSignal<DetectedRoom | null>(null);
   const [isDetectingRooms, setIsDetectingRooms] = createSignal(false);
   const [isInpainting, setIsInpainting] = createSignal(false);
+  const [roomDetectionError, setRoomDetectionError] = createSignal<string | null>(null);
 
   // Touch/swipe state
   let touchStartX = 0;
@@ -155,18 +156,28 @@ export default function App() {
 
     setViewState('editing');
     setSelectedRoom(null);
+    setRoomDetectionError(null);
 
-    // Detect rooms if not already done
+    // Detect rooms from the ORIGINAL 2D floor plan if not already done
     if (detectedRooms().length === 0) {
+      const originalImage = imageData();
+      if (!originalImage) {
+        setRoomDetectionError('No original floor plan image available');
+        return;
+      }
+
       setIsDetectingRooms(true);
       try {
-        const { detectRooms } = await import('./api/rooms');
-        const result = await detectRooms(current.data);
-        setDetectedRooms(result.rooms);
+        const { detectRoomsFrom2D } = await import('./api/rooms');
+        const result = await detectRoomsFrom2D(originalImage);
+        if (result.rooms.length === 0) {
+          setRoomDetectionError('No rooms detected in the floor plan');
+        } else {
+          setDetectedRooms(result.rooms);
+        }
       } catch (err) {
         console.error('Room detection failed:', err);
-        // Use mock rooms for demo
-        setDetectedRooms(getMockRooms());
+        setRoomDetectionError(err instanceof Error ? err.message : 'Room detection failed');
       } finally {
         setIsDetectingRooms(false);
       }
@@ -225,6 +236,7 @@ export default function App() {
     setRenderError(null);
     setDetectedRooms([]);
     setSelectedRoom(null);
+    setRoomDetectionError(null);
   };
 
   // Download current image
@@ -285,14 +297,6 @@ export default function App() {
 
   // Get current image
   const currentImage = () => galleryImages()[currentIndex()];
-
-  // Mock rooms for demo (used when API is not available)
-  const getMockRooms = (): DetectedRoom[] => [
-    { id: 'room-1', label: 'Living Room', confidence: 0.95, bbox: { x: 10, y: 10, width: 35, height: 40 }, polygon: [{ x: 10, y: 10 }, { x: 45, y: 10 }, { x: 45, y: 50 }, { x: 10, y: 50 }], featherPx: 12 },
-    { id: 'room-2', label: 'Kitchen', confidence: 0.92, bbox: { x: 50, y: 10, width: 40, height: 35 }, polygon: [{ x: 50, y: 10 }, { x: 90, y: 10 }, { x: 90, y: 45 }, { x: 50, y: 45 }], featherPx: 12 },
-    { id: 'room-3', label: 'Bedroom', confidence: 0.89, bbox: { x: 10, y: 55, width: 40, height: 35 }, polygon: [{ x: 10, y: 55 }, { x: 50, y: 55 }, { x: 50, y: 90 }, { x: 10, y: 90 }], featherPx: 12 },
-    { id: 'room-4', label: 'Bathroom', confidence: 0.87, bbox: { x: 55, y: 50, width: 35, height: 40 }, polygon: [{ x: 55, y: 50 }, { x: 90, y: 50 }, { x: 90, y: 90 }, { x: 55, y: 90 }], featherPx: 12 },
-  ];
 
   return (
     <div class="app">
@@ -425,7 +429,13 @@ export default function App() {
                 <Show when={isDetectingRooms()}>
                   <div class="detecting-rooms">
                     <div class="spinner" />
-                    <span>Detecting rooms...</span>
+                    <span>Analyzing floor plan...</span>
+                  </div>
+                </Show>
+                {/* Error state */}
+                <Show when={roomDetectionError()}>
+                  <div class="detection-error">
+                    <span>{roomDetectionError()}</span>
                   </div>
                 </Show>
               </Show>

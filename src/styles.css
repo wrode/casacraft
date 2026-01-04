@@ -777,6 +777,26 @@ body {
   display: block;
 }
 
+/* Detection error */
+.detection-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(220, 38, 38, 0.9);
+  color: white;
+  padding: 1.5rem 2rem;
+  border-radius: 16px;
+  text-align: center;
+  z-index: 20;
+  max-width: 80%;
+}
+
+.detection-error span {
+  font-size: 0.95rem;
+  display: block;
+}
+
 /* Editing hint */
 .editing-hint {
   position: absolute;

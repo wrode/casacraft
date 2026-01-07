@@ -4,37 +4,32 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Use Gemini Flash for fast, cost-effective vision analysis
 const VISION_MODEL = 'google/gemini-2.0-flash-001';
 
-const ROOM_DETECTION_PROMPT = `Analyze this 2D floor plan. Trace the EXACT boundary of each room by following the wall lines.
+const ROOM_DETECTION_PROMPT = `Look at this floor plan. For each room, I need you to:
 
-CRITICAL - POLYGON TRACING RULES:
-- Trace the EXACT shape of each room - most rooms are NOT simple rectangles
-- Walk along each wall segment, adding a point at every corner/turn
-- L-shaped rooms need 6 points, T-shaped need 8 points, etc.
-- Start at top-left corner, go clockwise
-- Add a point at EVERY corner where walls meet or change direction
+STEP 1: Describe each room's shape
+- Is it rectangular (4 corners)?
+- Is it L-shaped (6 corners)?
+- Is it irregular (count the corners)?
 
-For each room provide:
-- label: Room type in English (Living Room, Kitchen, Bedroom, Bathroom, Hallway, etc.)
-- polygon: Array of {x, y} points as percentages (0-100) of image size
+STEP 2: Trace the boundary as an SVG path
+- Use percentages of image size (0-100)
+- M = move to start, L = line to next point
+- Go clockwise from top-left corner
+- Add a point at EVERY corner/turn
 
-EXAMPLE - An L-shaped living room would have 6 points:
-{"label": "Living Room", "polygon": [
-  {"x": 15, "y": 20},
-  {"x": 35, "y": 20},
-  {"x": 35, "y": 40},
-  {"x": 25, "y": 40},
-  {"x": 25, "y": 55},
-  {"x": 15, "y": 55}
-]}
+Example for an L-shaped room:
+{"label": "Living Room", "shape": "L-shaped, 6 corners", "path": "M 15,20 L 35,20 L 35,40 L 25,40 L 25,55 L 15,55 Z"}
+
+Example for a rectangular room:
+{"label": "Bedroom", "shape": "rectangular, 4 corners", "path": "M 40,10 L 60,10 L 60,35 L 40,35 Z"}
 
 RULES:
-- Stay INSIDE the floor plan drawing - ignore white margins
-- Follow the BLACK WALL LINES exactly
-- Minimum 4 points, use MORE points for complex shapes
-- Rooms must not overlap
+- Count corners carefully - L-shaped = 6, T-shaped = 8, rectangular = 4
+- Stay inside the floor plan drawing (ignore white margins)
+- Follow wall lines exactly
 
-Return ONLY valid JSON array:
-[{"label": "...", "polygon": [...]}]`;
+Return ONLY a JSON array:
+[{"label": "...", "shape": "...", "path": "M ... Z"}]`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -119,13 +114,36 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Invalid room detection format' });
     }
 
+    // Parse SVG path to polygon points
+    function parseSvgPath(pathStr) {
+      if (!pathStr) return [];
+      const points = [];
+      // Match M/L followed by coordinates (handles "M 10,20" or "M10,20" or "M 10 20")
+      const regex = /([ML])\s*(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)/gi;
+      let match;
+      while ((match = regex.exec(pathStr)) !== null) {
+        points.push({
+          x: Math.max(0, Math.min(100, parseFloat(match[2]))),
+          y: Math.max(0, Math.min(100, parseFloat(match[3])))
+        });
+      }
+      return points;
+    }
+
     // Convert to DetectedRoom format
     const rooms = roomsData.map((room, index) => {
-      // Parse polygon points, clamping to valid range
-      const polygon = (room.polygon || []).map(pt => ({
-        x: Math.max(0, Math.min(100, pt.x || 0)),
-        y: Math.max(0, Math.min(100, pt.y || 0))
-      }));
+      // Try SVG path first, fall back to polygon array
+      let polygon;
+      if (room.path) {
+        polygon = parseSvgPath(room.path);
+      } else if (room.polygon) {
+        polygon = (room.polygon || []).map(pt => ({
+          x: Math.max(0, Math.min(100, pt.x || 0)),
+          y: Math.max(0, Math.min(100, pt.y || 0))
+        }));
+      } else {
+        polygon = [];
+      }
 
       // Calculate bounding box from polygon
       let minX = 100, minY = 100, maxX = 0, maxY = 0;
@@ -146,6 +164,7 @@ export default async function handler(req, res) {
         id: `room-${index}`,
         label: room.label || `Room ${index + 1}`,
         confidence: 0.9,
+        shape: room.shape || 'unknown',
         bbox: {
           x: minX,
           y: minY,

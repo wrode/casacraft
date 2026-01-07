@@ -4,27 +4,36 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Claude 3.5 Sonnet for vision tasks
 const VISION_MODEL = 'anthropic/claude-3.5-sonnet';
 
-const ROOM_DETECTION_PROMPT = `Look at this 2D floor plan image. I need you to trace the exact boundary of each room.
+const ROOM_DETECTION_PROMPT = `Analyze this floor plan image. For each room:
 
-For each room:
-1. Identify the room type (Bedroom, Living Room, Kitchen, Bathroom, Hallway, Balcony, etc.)
-2. Trace its boundary by listing polygon points as percentages of the image (0-100)
-3. Follow the WALLS exactly - add a point at every corner where walls turn
+1. FIRST, describe its shape:
+   - "rectangular" = 4 corners
+   - "L-shaped" = 6 corners
+   - "T-shaped" = 8 corners
+   - etc.
 
-IMPORTANT:
-- Most rooms are NOT rectangular. An L-shaped room needs 6 points, not 4.
-- Walk along the interior wall line, adding a vertex at each corner.
-- Stay within the floor plan drawing area (ignore white margins, text, logos).
-- Points should go clockwise starting from the top-left corner of each room.
+2. THEN, trace its boundary as an SVG path string using percentages (0-100):
+   - M = start point
+   - L = line to next corner
+   - Z = close path
+   - Go clockwise from top-left
 
-Example for an L-shaped room:
-{"label": "Living Room", "polygon": [
-  {"x": 20, "y": 15}, {"x": 40, "y": 15}, {"x": 40, "y": 35},
-  {"x": 30, "y": 35}, {"x": 30, "y": 50}, {"x": 20, "y": 50}
-]}
+EXAMPLES:
 
-Output ONLY a JSON array with all rooms, no other text:
-[{"label": "Room Name", "polygon": [{"x": ..., "y": ...}, ...]}]`;
+L-shaped room (6 corners):
+{"label": "Living Room", "shape": "L-shaped", "path": "M 15,20 L 35,20 L 35,40 L 25,40 L 25,55 L 15,55 Z"}
+
+Rectangular room (4 corners):
+{"label": "Bedroom", "shape": "rectangular", "path": "M 40,10 L 60,10 L 60,35 L 40,35 Z"}
+
+CRITICAL:
+- Count the actual corners in the floor plan for each room
+- L-shaped rooms MUST have 6 points, not 4
+- Stay inside the floor plan drawing, ignore margins
+- Follow the black wall lines exactly
+
+Output ONLY valid JSON array:
+[{"label": "...", "shape": "...", "path": "M ... Z"}]`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -103,11 +112,33 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Invalid room detection format' });
     }
 
+    // Parse SVG path to polygon points
+    function parseSvgPath(pathStr) {
+      if (!pathStr) return [];
+      const points = [];
+      const regex = /([ML])\s*(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)/gi;
+      let match;
+      while ((match = regex.exec(pathStr)) !== null) {
+        points.push({
+          x: Math.max(0, Math.min(100, parseFloat(match[2]))),
+          y: Math.max(0, Math.min(100, parseFloat(match[3])))
+        });
+      }
+      return points;
+    }
+
     const rooms = roomsData.map((room, index) => {
-      const polygon = (room.polygon || []).map(pt => ({
-        x: Math.max(0, Math.min(100, pt.x || 0)),
-        y: Math.max(0, Math.min(100, pt.y || 0))
-      }));
+      let polygon;
+      if (room.path) {
+        polygon = parseSvgPath(room.path);
+      } else if (room.polygon) {
+        polygon = (room.polygon || []).map(pt => ({
+          x: Math.max(0, Math.min(100, pt.x || 0)),
+          y: Math.max(0, Math.min(100, pt.y || 0))
+        }));
+      } else {
+        polygon = [];
+      }
 
       let minX = 100, minY = 100, maxX = 0, maxY = 0;
       for (const pt of polygon) {
@@ -123,6 +154,7 @@ export default async function handler(req, res) {
         id: `room-${index}`,
         label: room.label || `Room ${index + 1}`,
         confidence: 0.9,
+        shape: room.shape || 'unknown',
         bbox: { x: minX, y: minY, width: maxX - minX, height: maxY - minY },
         polygon,
         maskUrl: null,

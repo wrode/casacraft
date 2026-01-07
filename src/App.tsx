@@ -32,55 +32,81 @@ export default function App() {
   const [galleryImages, setGalleryImages] = createSignal<GalleryImage[]>([]);
   const [currentIndex, setCurrentIndex] = createSignal(0);
 
-  // Room editing state
-  const [detectedRooms, setDetectedRooms] = createSignal<DetectedRoom[]>([]);
+  // Room editing state - now stores results from all methods
+  type DetectionMethod = 'v1' | 'v2' | 'v3' | 'v4';
+  type AllResults = Record<DetectionMethod, { rooms: DetectedRoom[]; error?: string; loading: boolean }>;
+
+  const [allDetectionResults, setAllDetectionResults] = createSignal<AllResults>({
+    v1: { rooms: [], loading: false },
+    v2: { rooms: [], loading: false },
+    v3: { rooms: [], loading: false },
+    v4: { rooms: [], loading: false },
+  });
+  const [activeMethod, setActiveMethod] = createSignal<DetectionMethod>('v1');
   const [selectedRoom, setSelectedRoom] = createSignal<DetectedRoom | null>(null);
-  const [isDetectingRooms, setIsDetectingRooms] = createSignal(false);
   const [isInpainting, setIsInpainting] = createSignal(false);
-  const [roomDetectionError, setRoomDetectionError] = createSignal<string | null>(null);
-  const [detectionMethod, setDetectionMethod] = createSignal<'v1' | 'v2'>('v1');
+
+  // Computed: get current rooms based on active method
+  const detectedRooms = () => allDetectionResults()[activeMethod()].rooms;
+  const isDetectingRooms = () => Object.values(allDetectionResults()).some(r => r.loading);
+  const roomDetectionError = () => allDetectionResults()[activeMethod()].error || null;
 
   // Touch/swipe state
   let touchStartX = 0;
   let touchEndX = 0;
 
-  // Run room detection with specified method
-  const runRoomDetection = async (imageDataUrl: string, method: 'v1' | 'v2') => {
-    setIsDetectingRooms(true);
-    setRoomDetectionError(null);
-    setDetectedRooms([]);
+  // Run ALL detection methods in parallel
+  const runAllDetectionMethods = async (imageDataUrl: string) => {
+    const methods: DetectionMethod[] = ['v1', 'v2', 'v3', 'v4'];
 
-    try {
-      const { detectRoomsFrom2D } = await import('./api/rooms');
-      const result = await detectRoomsFrom2D(imageDataUrl, method);
-      if (result.rooms.length === 0) {
-        setRoomDetectionError('No rooms detected in the floor plan');
-      } else {
-        setDetectedRooms(result.rooms);
+    // Set all to loading
+    setAllDetectionResults({
+      v1: { rooms: [], loading: true },
+      v2: { rooms: [], loading: true },
+      v3: { rooms: [], loading: true },
+      v4: { rooms: [], loading: true },
+    });
+
+    const { detectRoomsFrom2D } = await import('./api/rooms');
+
+    // Run all methods in parallel
+    methods.forEach(async (method) => {
+      try {
+        const result = await detectRoomsFrom2D(imageDataUrl, method);
+        setAllDetectionResults(prev => ({
+          ...prev,
+          [method]: {
+            rooms: result.rooms || [],
+            loading: false,
+            error: result.rooms.length === 0 ? 'No rooms detected' : undefined
+          }
+        }));
+      } catch (err) {
+        console.error(`Detection ${method} failed:`, err);
+        setAllDetectionResults(prev => ({
+          ...prev,
+          [method]: {
+            rooms: [],
+            loading: false,
+            error: err instanceof Error ? err.message : 'Detection failed'
+          }
+        }));
       }
-    } catch (err) {
-      console.error('Room detection failed:', err);
-      setRoomDetectionError(err instanceof Error ? err.message : 'Room detection failed');
-    } finally {
-      setIsDetectingRooms(false);
-    }
+    });
   };
 
-  // Handle file upload - analyze 2D floor plan first
+  // Handle file upload - run all detection methods
   const handleFileSelect = async (dataUrl: string, name: string) => {
     setImageData(dataUrl);
     setFileName(name);
     setViewState('planning');
-    await runRoomDetection(dataUrl, detectionMethod());
+    runAllDetectionMethods(dataUrl);
   };
 
-  // Re-run detection with different method
-  const handleRetryDetection = async (method: 'v1' | 'v2') => {
-    setDetectionMethod(method);
-    const image = imageData();
-    if (image) {
-      await runRoomDetection(image, method);
-    }
+  // Switch active method (results already loaded)
+  const handleSwitchMethod = (method: DetectionMethod) => {
+    setActiveMethod(method);
+    setSelectedRoom(null);
   };
 
   // Start generating renders (called from planning view)
@@ -249,9 +275,14 @@ export default function App() {
     setGalleryImages([]);
     setCurrentIndex(0);
     setRenderError(null);
-    setDetectedRooms([]);
+    setAllDetectionResults({
+      v1: { rooms: [], loading: false },
+      v2: { rooms: [], loading: false },
+      v3: { rooms: [], loading: false },
+      v4: { rooms: [], loading: false },
+    });
+    setActiveMethod('v1');
     setSelectedRoom(null);
-    setRoomDetectionError(null);
   };
 
   // Download current image
@@ -371,23 +402,27 @@ export default function App() {
                 </Show>
               </div>
 
-              {/* Detection method toggle */}
+              {/* Detection method tabs - show all 4 with status */}
               <div class="detection-method-toggle">
-                <span class="toggle-label">Detection:</span>
-                <button
-                  class={`toggle-btn ${detectionMethod() === 'v1' ? 'active' : ''}`}
-                  onClick={() => handleRetryDetection('v1')}
-                  disabled={isDetectingRooms()}
-                >
-                  V1 (Single)
-                </button>
-                <button
-                  class={`toggle-btn ${detectionMethod() === 'v2' ? 'active' : ''}`}
-                  onClick={() => handleRetryDetection('v2')}
-                  disabled={isDetectingRooms()}
-                >
-                  V2 (Two-pass)
-                </button>
+                <span class="toggle-label">Method:</span>
+                {(['v1', 'v2', 'v3', 'v4'] as const).map((method) => {
+                  const result = allDetectionResults()[method];
+                  const isActive = activeMethod() === method;
+                  const hasRooms = result.rooms.length > 0;
+                  const hasError = !!result.error;
+
+                  return (
+                    <button
+                      class={`toggle-btn ${isActive ? 'active' : ''} ${hasError ? 'error' : ''} ${hasRooms ? 'success' : ''}`}
+                      onClick={() => handleSwitchMethod(method)}
+                    >
+                      {method.toUpperCase()}
+                      {result.loading && <span class="btn-spinner" />}
+                      {!result.loading && hasRooms && <span class="btn-count">{result.rooms.length}</span>}
+                      {!result.loading && hasError && <span class="btn-error">!</span>}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Room list */}

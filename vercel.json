@@ -20,6 +20,12 @@
     },
     "api/rooms/detect-2d-v2.js": {
       "maxDuration": 60
+    },
+    "api/rooms/detect-2d-v3.js": {
+      "maxDuration": 30
+    },
+    "api/rooms/detect-2d-v4.js": {
+      "maxDuration": 120
     }
   }
 }

@@ -1,22 +1,32 @@
 import type { RoomDetectionResult, DetectedRoom, InpaintResult, BoundingBox } from '../types';
 
-// API URLs
-const DETECT_2D_URL = '/api/rooms/detect-2d';
-const DETECT_2D_V2_URL = '/api/rooms/detect-2d-v2';
+// API URLs for different detection strategies
+const DETECT_URLS: Record<DetectionMethod, string> = {
+  v1: '/api/rooms/detect-2d',      // Gemini with improved prompts
+  v2: '/api/rooms/detect-2d-v2',   // Two-pass bounds detection
+  v3: '/api/rooms/detect-2d-v3',   // Claude Vision
+  v4: '/api/rooms/detect-2d-v4',   // Room-by-room detection
+};
+
 const INPAINT_URL = '/api/rooms/inpaint';
 
-export type DetectionMethod = 'v1' | 'v2';
+export type DetectionMethod = 'v1' | 'v2' | 'v3' | 'v4';
+
+export const DETECTION_METHODS: { id: DetectionMethod; label: string; description: string }[] = [
+  { id: 'v1', label: 'V1 Gemini', description: 'Single pass with Gemini' },
+  { id: 'v2', label: 'V2 Two-pass', description: 'Bounds detection first' },
+  { id: 'v3', label: 'V3 Claude', description: 'Claude Vision model' },
+  { id: 'v4', label: 'V4 Per-room', description: 'Trace each room separately' },
+];
 
 /**
  * Detect rooms from a 2D floor plan image using vision AI
- * @param imageData - base64 image data
- * @param method - 'v1' (single pass with better instructions) or 'v2' (two-pass with bounds detection)
  */
 export async function detectRoomsFrom2D(
   imageData: string,
   method: DetectionMethod = 'v1'
-): Promise<RoomDetectionResult> {
-  const url = method === 'v2' ? DETECT_2D_V2_URL : DETECT_2D_URL;
+): Promise<RoomDetectionResult & { method?: string }> {
+  const url = DETECT_URLS[method];
 
   const response = await fetch(url, {
     method: 'POST',
@@ -31,7 +41,29 @@ export async function detectRoomsFrom2D(
     throw new Error(`Room detection failed: ${error}`);
   }
 
-  return response.json();
+  const result = await response.json();
+  return { ...result, method };
+}
+
+/**
+ * Run all detection methods in parallel and return results
+ */
+export async function detectRoomsAllMethods(
+  imageData: string
+): Promise<Map<DetectionMethod, RoomDetectionResult | Error>> {
+  const results = new Map<DetectionMethod, RoomDetectionResult | Error>();
+
+  const promises = DETECTION_METHODS.map(async ({ id }) => {
+    try {
+      const result = await detectRoomsFrom2D(imageData, id);
+      results.set(id, result);
+    } catch (err) {
+      results.set(id, err instanceof Error ? err : new Error(String(err)));
+    }
+  });
+
+  await Promise.all(promises);
+  return results;
 }
 
 /**

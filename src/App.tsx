@@ -17,8 +17,8 @@ interface GalleryImage {
 }
 
 export default function App() {
-  // View state
-  const [viewState, setViewState] = createSignal<'upload' | 'generating' | 'render' | 'editing'>('upload');
+  // View state: upload -> planning (analyze 2D) -> generating -> render -> editing
+  const [viewState, setViewState] = createSignal<'upload' | 'planning' | 'generating' | 'render' | 'editing'>('upload');
 
   // File state
   const [imageData, setImageData] = createSignal<string | null>(null);
@@ -43,11 +43,38 @@ export default function App() {
   let touchStartX = 0;
   let touchEndX = 0;
 
-  // Handle file upload - start generating both styles
-  const handleFileSelect = (dataUrl: string, name: string) => {
+  // Handle file upload - analyze 2D floor plan first
+  const handleFileSelect = async (dataUrl: string, name: string) => {
     setImageData(dataUrl);
     setFileName(name);
-    handleGenerateRenders(dataUrl);
+    setViewState('planning');
+    setRoomDetectionError(null);
+    setDetectedRooms([]);
+
+    // Immediately detect rooms from the 2D floor plan
+    setIsDetectingRooms(true);
+    try {
+      const { detectRoomsFrom2D } = await import('./api/rooms');
+      const result = await detectRoomsFrom2D(dataUrl);
+      if (result.rooms.length === 0) {
+        setRoomDetectionError('No rooms detected in the floor plan');
+      } else {
+        setDetectedRooms(result.rooms);
+      }
+    } catch (err) {
+      console.error('Room detection failed:', err);
+      setRoomDetectionError(err instanceof Error ? err.message : 'Room detection failed');
+    } finally {
+      setIsDetectingRooms(false);
+    }
+  };
+
+  // Start generating renders (called from planning view)
+  const handleStartGeneration = () => {
+    const image = imageData();
+    if (image) {
+      handleGenerateRenders(image);
+    }
   };
 
   // Generate both styles in parallel
@@ -149,39 +176,13 @@ export default function App() {
     }
   };
 
-  // Handle entering edit mode
-  const handleEnterEditMode = async () => {
+  // Handle entering edit mode (rooms already detected during planning phase)
+  const handleEnterEditMode = () => {
     const current = currentImage();
     if (!current || current.type === 'original') return;
 
     setViewState('editing');
     setSelectedRoom(null);
-    setRoomDetectionError(null);
-
-    // Detect rooms from the ORIGINAL 2D floor plan if not already done
-    if (detectedRooms().length === 0) {
-      const originalImage = imageData();
-      if (!originalImage) {
-        setRoomDetectionError('No original floor plan image available');
-        return;
-      }
-
-      setIsDetectingRooms(true);
-      try {
-        const { detectRoomsFrom2D } = await import('./api/rooms');
-        const result = await detectRoomsFrom2D(originalImage);
-        if (result.rooms.length === 0) {
-          setRoomDetectionError('No rooms detected in the floor plan');
-        } else {
-          setDetectedRooms(result.rooms);
-        }
-      } catch (err) {
-        console.error('Room detection failed:', err);
-        setRoomDetectionError(err instanceof Error ? err.message : 'Room detection failed');
-      } finally {
-        setIsDetectingRooms(false);
-      }
-    }
   };
 
   // Handle exiting edit mode
@@ -312,6 +313,61 @@ export default function App() {
               <Show when={renderError()}>
                 <div class="error-message">
                   {renderError()}
+                </div>
+              </Show>
+            </div>
+          </div>
+        </Show>
+
+        {/* Planning page - show 2D floor plan with detected rooms */}
+        <Show when={viewState() === 'planning'}>
+          <div class="planning-page">
+            <div class="planning-container">
+              <div class="planning-image-wrapper">
+                <Show when={imageData()}>
+                  <img
+                    src={imageData()!}
+                    alt="Floor plan"
+                    class="planning-image"
+                    draggable={false}
+                  />
+                  {/* Room overlay on 2D floor plan */}
+                  <Show when={!isDetectingRooms() && detectedRooms().length > 0}>
+                    <RoomOverlay
+                      rooms={detectedRooms()}
+                      selectedRoomId={selectedRoom()?.id || null}
+                      onRoomClick={handleRoomClick}
+                      imageWidth={1024}
+                      imageHeight={1024}
+                    />
+                  </Show>
+                  {/* Loading indicator */}
+                  <Show when={isDetectingRooms()}>
+                    <div class="detecting-rooms">
+                      <div class="spinner" />
+                      <span>Analyzing floor plan...</span>
+                    </div>
+                  </Show>
+                  {/* Error state */}
+                  <Show when={roomDetectionError()}>
+                    <div class="detection-error">
+                      <span>{roomDetectionError()}</span>
+                    </div>
+                  </Show>
+                </Show>
+              </div>
+
+              {/* Room list */}
+              <Show when={!isDetectingRooms() && detectedRooms().length > 0}>
+                <div class="detected-rooms-list">
+                  <h4>Detected Rooms ({detectedRooms().length})</h4>
+                  <div class="rooms-chips">
+                    <For each={detectedRooms()}>
+                      {(room) => (
+                        <span class="room-chip">{room.label}</span>
+                      )}
+                    </For>
+                  </div>
                 </div>
               </Show>
             </div>
@@ -460,6 +516,29 @@ export default function App() {
           </div>
         </Show>
       </main>
+
+      {/* Bottom bar - planning page */}
+      <Show when={viewState() === 'planning'}>
+        <div class="bottom-bar">
+          <button class="bottom-bar-btn" onClick={handleNewRender}>
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="15,18 9,12 15,6" />
+            </svg>
+            <span>Back</span>
+          </button>
+
+          <button
+            class="bottom-bar-btn primary"
+            onClick={handleStartGeneration}
+            disabled={isDetectingRooms() || detectedRooms().length === 0}
+          >
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5,3 19,12 5,21" fill="currentColor" />
+            </svg>
+            <span>Generate 3D</span>
+          </button>
+        </div>
+      </Show>
 
       {/* Bottom bar - render page */}
       <Show when={viewState() === 'render'}>

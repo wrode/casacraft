@@ -4,31 +4,37 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Use Gemini Flash for fast, cost-effective vision analysis
 const VISION_MODEL = 'google/gemini-2.0-flash-001';
 
-const ROOM_DETECTION_PROMPT = `Analyze this 2D floor plan image. Identify all distinct rooms/spaces and trace their boundaries.
+const ROOM_DETECTION_PROMPT = `Analyze this 2D floor plan. Trace the EXACT boundary of each room by following the wall lines.
 
-CRITICAL: First identify the ACTUAL FLOOR PLAN DRAWING area. Ignore:
-- White/empty margins around the floor plan
-- Text labels, dimensions, logos outside the plan
-- Any area that is not part of the architectural drawing itself
+CRITICAL - POLYGON TRACING RULES:
+- Trace the EXACT shape of each room - most rooms are NOT simple rectangles
+- Walk along each wall segment, adding a point at every corner/turn
+- L-shaped rooms need 6 points, T-shaped need 8 points, etc.
+- Start at top-left corner, go clockwise
+- Add a point at EVERY corner where walls meet or change direction
 
-For each room, provide:
-- label: The room type (Living Room, Kitchen, Bedroom, Bathroom, Hallway, Dining Room, Office, Closet, Balcony, etc.)
-- polygon: Array of points tracing the room boundary, as percentages of image dimensions (0-100)
-  - Each point is {x, y} where x is percentage from left, y is percentage from top
-  - Trace along the INTERIOR walls of each room
-  - Use 4-8 points to accurately capture the room shape (more for complex shapes)
-  - Points should go clockwise
+For each room provide:
+- label: Room type in English (Living Room, Kitchen, Bedroom, Bathroom, Hallway, etc.)
+- polygon: Array of {x, y} points as percentages (0-100) of image size
 
-IMPORTANT RULES:
-- ALL polygon points MUST be within the actual floor plan drawing bounds
-- Do NOT place any points in white/empty margins or outside the floor plan
-- Polygons should follow the BLACK WALL LINES precisely
-- Rooms should NOT overlap
-- For L-shaped or irregular rooms, use more polygon points to capture the shape
-- Use standard room names in English
+EXAMPLE - An L-shaped living room would have 6 points:
+{"label": "Living Room", "polygon": [
+  {"x": 15, "y": 20},
+  {"x": 35, "y": 20},
+  {"x": 35, "y": 40},
+  {"x": 25, "y": 40},
+  {"x": 25, "y": 55},
+  {"x": 15, "y": 55}
+]}
 
-Return ONLY valid JSON array, no markdown, no explanation:
-[{"label": "Living Room", "polygon": [{"x": 10, "y": 20}, {"x": 40, "y": 20}, {"x": 40, "y": 55}, {"x": 10, "y": 55}]}]`;
+RULES:
+- Stay INSIDE the floor plan drawing - ignore white margins
+- Follow the BLACK WALL LINES exactly
+- Minimum 4 points, use MORE points for complex shapes
+- Rooms must not overlap
+
+Return ONLY valid JSON array:
+[{"label": "...", "polygon": [...]}]`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {

@@ -21,30 +21,36 @@ Return ONLY valid JSON, no markdown:
 {"x": 15, "y": 10, "width": 60, "height": 75}`;
 
 // Pass 2: Detect rooms within bounds (bounds will be inserted)
-const ROOM_DETECTION_TEMPLATE = `Analyze this 2D floor plan image. The actual floor plan drawing is located at:
-- Left edge: BOUNDS_X% from left
-- Top edge: BOUNDS_Y% from top
-- Width: BOUNDS_W% of image
-- Height: BOUNDS_H% of image
+const ROOM_DETECTION_TEMPLATE = `Analyze this 2D floor plan. The floor plan drawing is at:
+- Left: BOUNDS_X%, Top: BOUNDS_Y%, Width: BOUNDS_W%, Height: BOUNDS_H%
 
-Identify all rooms within these bounds and trace their boundaries.
+Trace the EXACT boundary of each room by following the wall lines.
 
-For each room, provide:
-- label: The room type (Living Room, Kitchen, Bedroom, Bathroom, Hallway, Dining Room, Office, Closet, Balcony, etc.)
-- polygon: Array of points as percentages of the FULL IMAGE (0-100)
-  - Each point is {x, y} where x is percentage from left, y is percentage from top
-  - Trace along the interior walls of each room
-  - Use 4-8 points to capture the room shape accurately
-  - Points should go clockwise
+CRITICAL - POLYGON TRACING:
+- Trace the EXACT shape - most rooms are NOT simple rectangles
+- Walk along each wall, adding a point at every corner/turn
+- L-shaped rooms need 6 points, T-shaped need 8 points, etc.
+- Start top-left, go clockwise
+- Add a point at EVERY corner where walls change direction
+
+For each room provide:
+- label: Room type in English
+- polygon: Array of {x, y} points as percentages (0-100) of FULL image
+
+EXAMPLE - L-shaped room with 6 points:
+{"label": "Living Room", "polygon": [
+  {"x": 15, "y": 20}, {"x": 35, "y": 20}, {"x": 35, "y": 40},
+  {"x": 25, "y": 40}, {"x": 25, "y": 55}, {"x": 15, "y": 55}
+]}
 
 RULES:
-- ALL points must be WITHIN the floor plan bounds specified above
-- Follow the black wall lines precisely
-- Rooms should not overlap
-- Use more points for L-shaped or irregular rooms
+- ALL points must be within the floor plan bounds above
+- Follow BLACK WALL LINES exactly
+- Minimum 4 points, MORE for complex shapes
+- No overlapping rooms
 
-Return ONLY valid JSON array, no markdown:
-[{"label": "Living Room", "polygon": [{"x": 20, "y": 25}, {"x": 45, "y": 25}, {"x": 45, "y": 60}, {"x": 20, "y": 60}]}]`;
+Return ONLY valid JSON array:
+[{"label": "...", "polygon": [...]}]`;
 
 async function callVisionAPI(apiKey, imageData, prompt, referer) {
   const response = await fetch(OPENROUTER_API_URL, {

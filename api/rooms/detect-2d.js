@@ -4,24 +4,25 @@ const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 // Use Gemini Flash for fast, cost-effective vision analysis
 const VISION_MODEL = 'google/gemini-2.0-flash-001';
 
-const ROOM_DETECTION_PROMPT = `Analyze this 2D floor plan image. Identify all distinct rooms/spaces.
+const ROOM_DETECTION_PROMPT = `Analyze this 2D floor plan image. Identify all distinct rooms/spaces and trace their boundaries.
 
 For each room, provide:
 - label: The room type (Living Room, Kitchen, Bedroom, Bathroom, Hallway, Dining Room, Office, Closet, Balcony, etc.)
-- bounds: Bounding box as percentages of image dimensions where x,y is the TOP-LEFT corner
-  - x: percentage from left edge (0-100)
-  - y: percentage from top edge (0-100)
-  - width: percentage of image width (0-100)
-  - height: percentage of image height (0-100)
+- polygon: Array of points tracing the room boundary, as percentages of image dimensions (0-100)
+  - Each point is {x, y} where x is percentage from left, y is percentage from top
+  - Trace along the INTERIOR walls of each room
+  - Use 4-8 points to accurately capture the room shape
+  - Points should go clockwise starting from top-left corner
 
 Important:
 - Include ALL rooms visible in the floor plan
-- Bounding boxes should tightly fit each room
-- If rooms overlap or are unclear, make your best estimate
-- Use standard room names
+- Polygons should follow the actual wall boundaries precisely
+- Do NOT include space outside the floor plan drawing
+- Rooms should NOT overlap - each polygon covers only its own room
+- Use standard room names in English
 
 Return ONLY valid JSON array, no markdown, no explanation:
-[{"label": "Living Room", "bounds": {"x": 10, "y": 15, "width": 35, "height": 40}}]`;
+[{"label": "Living Room", "polygon": [{"x": 10, "y": 20}, {"x": 40, "y": 20}, {"x": 40, "y": 55}, {"x": 10, "y": 55}]}]`;
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -108,27 +109,42 @@ export default async function handler(req, res) {
 
     // Convert to DetectedRoom format
     const rooms = roomsData.map((room, index) => {
-      const bounds = room.bounds || {};
-      const x = Math.max(0, Math.min(100, bounds.x || 0));
-      const y = Math.max(0, Math.min(100, bounds.y || 0));
-      const width = Math.max(1, Math.min(100 - x, bounds.width || 20));
-      const height = Math.max(1, Math.min(100 - y, bounds.height || 20));
+      // Parse polygon points, clamping to valid range
+      const polygon = (room.polygon || []).map(pt => ({
+        x: Math.max(0, Math.min(100, pt.x || 0)),
+        y: Math.max(0, Math.min(100, pt.y || 0))
+      }));
+
+      // Calculate bounding box from polygon
+      let minX = 100, minY = 100, maxX = 0, maxY = 0;
+      for (const pt of polygon) {
+        minX = Math.min(minX, pt.x);
+        minY = Math.min(minY, pt.y);
+        maxX = Math.max(maxX, pt.x);
+        maxY = Math.max(maxY, pt.y);
+      }
+
+      // Fallback if polygon is empty or invalid
+      if (polygon.length < 3) {
+        console.warn(`Room ${room.label} has invalid polygon, skipping`);
+        return null;
+      }
 
       return {
         id: `room-${index}`,
         label: room.label || `Room ${index + 1}`,
-        confidence: 0.9, // Vision model doesn't return confidence, assume high
-        bbox: { x, y, width, height },
-        polygon: [
-          { x, y },
-          { x: x + width, y },
-          { x: x + width, y: y + height },
-          { x, y: y + height }
-        ],
+        confidence: 0.9,
+        bbox: {
+          x: minX,
+          y: minY,
+          width: maxX - minX,
+          height: maxY - minY
+        },
+        polygon,
         maskUrl: null,
         featherPx: 12
       };
-    });
+    }).filter(Boolean); // Remove any null entries
 
     return res.status(200).json({
       rooms,

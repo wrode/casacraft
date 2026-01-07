@@ -2,14 +2,23 @@ import type { RoomDetectionResult, DetectedRoom, InpaintResult, BoundingBox } fr
 
 // API URLs
 const DETECT_2D_URL = '/api/rooms/detect-2d';
+const DETECT_2D_V2_URL = '/api/rooms/detect-2d-v2';
 const INPAINT_URL = '/api/rooms/inpaint';
+
+export type DetectionMethod = 'v1' | 'v2';
 
 /**
  * Detect rooms from a 2D floor plan image using vision AI
- * This should be called on the ORIGINAL floor plan, not the 3D render
+ * @param imageData - base64 image data
+ * @param method - 'v1' (single pass with better instructions) or 'v2' (two-pass with bounds detection)
  */
-export async function detectRoomsFrom2D(imageData: string): Promise<RoomDetectionResult> {
-  const response = await fetch(DETECT_2D_URL, {
+export async function detectRoomsFrom2D(
+  imageData: string,
+  method: DetectionMethod = 'v1'
+): Promise<RoomDetectionResult> {
+  const url = method === 'v2' ? DETECT_2D_V2_URL : DETECT_2D_URL;
+
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

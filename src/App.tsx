@@ -38,24 +38,21 @@ export default function App() {
   const [isDetectingRooms, setIsDetectingRooms] = createSignal(false);
   const [isInpainting, setIsInpainting] = createSignal(false);
   const [roomDetectionError, setRoomDetectionError] = createSignal<string | null>(null);
+  const [detectionMethod, setDetectionMethod] = createSignal<'v1' | 'v2'>('v1');
 
   // Touch/swipe state
   let touchStartX = 0;
   let touchEndX = 0;
 
-  // Handle file upload - analyze 2D floor plan first
-  const handleFileSelect = async (dataUrl: string, name: string) => {
-    setImageData(dataUrl);
-    setFileName(name);
-    setViewState('planning');
+  // Run room detection with specified method
+  const runRoomDetection = async (imageDataUrl: string, method: 'v1' | 'v2') => {
+    setIsDetectingRooms(true);
     setRoomDetectionError(null);
     setDetectedRooms([]);
 
-    // Immediately detect rooms from the 2D floor plan
-    setIsDetectingRooms(true);
     try {
       const { detectRoomsFrom2D } = await import('./api/rooms');
-      const result = await detectRoomsFrom2D(dataUrl);
+      const result = await detectRoomsFrom2D(imageDataUrl, method);
       if (result.rooms.length === 0) {
         setRoomDetectionError('No rooms detected in the floor plan');
       } else {
@@ -66,6 +63,23 @@ export default function App() {
       setRoomDetectionError(err instanceof Error ? err.message : 'Room detection failed');
     } finally {
       setIsDetectingRooms(false);
+    }
+  };
+
+  // Handle file upload - analyze 2D floor plan first
+  const handleFileSelect = async (dataUrl: string, name: string) => {
+    setImageData(dataUrl);
+    setFileName(name);
+    setViewState('planning');
+    await runRoomDetection(dataUrl, detectionMethod());
+  };
+
+  // Re-run detection with different method
+  const handleRetryDetection = async (method: 'v1' | 'v2') => {
+    setDetectionMethod(method);
+    const image = imageData();
+    if (image) {
+      await runRoomDetection(image, method);
     }
   };
 
@@ -355,6 +369,25 @@ export default function App() {
                     </div>
                   </Show>
                 </Show>
+              </div>
+
+              {/* Detection method toggle */}
+              <div class="detection-method-toggle">
+                <span class="toggle-label">Detection:</span>
+                <button
+                  class={`toggle-btn ${detectionMethod() === 'v1' ? 'active' : ''}`}
+                  onClick={() => handleRetryDetection('v1')}
+                  disabled={isDetectingRooms()}
+                >
+                  V1 (Single)
+                </button>
+                <button
+                  class={`toggle-btn ${detectionMethod() === 'v2' ? 'active' : ''}`}
+                  onClick={() => handleRetryDetection('v2')}
+                  disabled={isDetectingRooms()}
+                >
+                  V2 (Two-pass)
+                </button>
               </div>
 
               {/* Room list */}

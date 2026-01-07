@@ -6,19 +6,25 @@ const VISION_MODEL = 'google/gemini-2.0-flash-001';
 
 const ROOM_DETECTION_PROMPT = `Analyze this 2D floor plan image. Identify all distinct rooms/spaces and trace their boundaries.
 
+CRITICAL: First identify the ACTUAL FLOOR PLAN DRAWING area. Ignore:
+- White/empty margins around the floor plan
+- Text labels, dimensions, logos outside the plan
+- Any area that is not part of the architectural drawing itself
+
 For each room, provide:
 - label: The room type (Living Room, Kitchen, Bedroom, Bathroom, Hallway, Dining Room, Office, Closet, Balcony, etc.)
 - polygon: Array of points tracing the room boundary, as percentages of image dimensions (0-100)
   - Each point is {x, y} where x is percentage from left, y is percentage from top
   - Trace along the INTERIOR walls of each room
-  - Use 4-8 points to accurately capture the room shape
-  - Points should go clockwise starting from top-left corner
+  - Use 4-8 points to accurately capture the room shape (more for complex shapes)
+  - Points should go clockwise
 
-Important:
-- Include ALL rooms visible in the floor plan
-- Polygons should follow the actual wall boundaries precisely
-- Do NOT include space outside the floor plan drawing
-- Rooms should NOT overlap - each polygon covers only its own room
+IMPORTANT RULES:
+- ALL polygon points MUST be within the actual floor plan drawing bounds
+- Do NOT place any points in white/empty margins or outside the floor plan
+- Polygons should follow the BLACK WALL LINES precisely
+- Rooms should NOT overlap
+- For L-shaped or irregular rooms, use more polygon points to capture the shape
 - Use standard room names in English
 
 Return ONLY valid JSON array, no markdown, no explanation:

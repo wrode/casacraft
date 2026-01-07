@@ -105,6 +105,49 @@ body {
   border: 1px solid rgba(79, 70, 229, 0.3);
 }
 
+/* Detection method toggle */
+.detection-method-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+}
+
+.toggle-label {
+  color: #a1a1aa;
+  font-size: 0.85rem;
+  margin-right: 0.5rem;
+}
+
+.toggle-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #a1a1aa;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.toggle-btn:hover:not(:disabled) {
+  background: rgba(79, 70, 229, 0.2);
+  border-color: rgba(79, 70, 229, 0.3);
+}
+
+.toggle-btn.active {
+  background: rgba(79, 70, 229, 0.3);
+  border-color: #4f46e5;
+  color: #a5b4fc;
+}
+
+.toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Subtle background pattern */
 .upload-page::before {
   content: '';
